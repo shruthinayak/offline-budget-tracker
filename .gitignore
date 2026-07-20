@@ -9,5 +9,6 @@ dist-ssr/
 !.vscode/extensions.json
 .idea
 
-# Real personal bank/statement exports used for local testing — never commit.
-testdata/
+# Proprietary spec/planning docs (SPEC.md, PRD.pdf, design mockup) and real
+# personal bank/statement exports used for local testing — never commit.
+spec/
