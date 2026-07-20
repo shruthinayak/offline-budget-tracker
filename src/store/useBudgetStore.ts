@@ -6,7 +6,9 @@ import { parseFilenameTags } from '../lib/csv/filenameTagParser'
 import { parseCsvFile } from '../lib/csv/parseCsvFile'
 import { categorizeAll } from '../lib/categorization/categorizationEngine'
 import { buildSeedCategories, buildSeedCategoryRules, SEED_VERSION } from '../lib/categorization/seedData'
+import { exportPersonalizedRules, parsePersonalizedRules } from '../lib/categorization/personalizedRules'
 import { downloadTransactionsCsv } from '../lib/export/exportTransactionsCsv'
+import { downloadJson } from '../lib/export/downloadJson'
 import { mergeIntoLedger } from '../lib/export/consolidation'
 import {
   deleteCategoryRules,
@@ -69,6 +71,8 @@ interface BudgetStoreState {
   editTransactionCategories: (ids: string[], category: string) => Promise<void>
   addCustomCategory: (name: string) => Promise<void>
   setCategoryKind: (name: string, kind: CategoryKind) => Promise<void>
+  exportRules: () => void
+  importRules: (file: File) => Promise<{ importedCount: number } | { error: string }>
   exportCsv: () => void
   consolidateAndDownload: () => Promise<void>
   startNewBatch: () => Promise<void>
@@ -382,6 +386,60 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
     const updated: Category = { ...target, kind }
     await putCategory(updated)
     set({ categories: categories.map((c) => (c.name === name ? updated : c)) })
+  },
+
+  exportRules() {
+    const entries = exportPersonalizedRules(get().categoryRules)
+    downloadJson(entries, 'personalized-merchant-categories.json')
+  },
+
+  async importRules(file) {
+    const parsedEntries = parsePersonalizedRules(await file.text())
+    if (!parsedEntries) {
+      return { error: `Could not parse "${file.name}" as a rules file.` }
+    }
+    if (parsedEntries.length === 0) {
+      return { error: `No valid rules found in "${file.name}".` }
+    }
+
+    const { categoryRules, transactions } = get()
+    const now = Date.now()
+    const existingByKey = new Map(
+      categoryRules.filter((r) => r.source === 'user-labeled').map((r) => [`${r.matchType}:${r.pattern}`, r]),
+    )
+    const rulesToPersist: CategoryRule[] = parsedEntries.map((entry) => {
+      const existing = existingByKey.get(`${entry.matchType}:${entry.pattern}`)
+      return existing
+        ? { ...existing, category: entry.category, lastAppliedAt: now }
+        : {
+            id: crypto.randomUUID(),
+            pattern: entry.pattern,
+            matchType: entry.matchType,
+            category: entry.category,
+            source: 'user-labeled' as const,
+            confidence: 1,
+            createdAt: now,
+            lastAppliedAt: now,
+            timesApplied: 0,
+          }
+    })
+    await putCategoryRules(rulesToPersist)
+    const byId = new Map(rulesToPersist.map((r) => [r.id, r]))
+    const mergedRules = [...categoryRules.filter((r) => !byId.has(r.id)), ...rulesToPersist]
+
+    // Apply the newly imported rules to any currently uncategorized rows —
+    // categorizeTransaction is a no-op for already-categorized ones, so this
+    // only fills gaps, same as the reseed path in loadInitialData.
+    const usage = new Map<string, number>()
+    const recategorized = categorizeAll(transactions, mergedRules, (rule) =>
+      usage.set(rule.id, (usage.get(rule.id) ?? 0) + 1),
+    )
+    const changed = recategorized.filter((t, i) => t !== transactions[i])
+    if (changed.length > 0) await putTransactions(changed)
+    const finalRules = await applyRuleUsage(mergedRules, usage)
+
+    set({ categoryRules: finalRules, transactions: recategorized })
+    return { importedCount: rulesToPersist.length }
   },
 
   exportCsv() {

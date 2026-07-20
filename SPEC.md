@@ -34,7 +34,7 @@ A third PRD feature (chat popup with an "Audit my expenses" preloaded action) ha
 | CSV parsing | PapaParse | Handles real-world quoting/escaping; worker-thread parsing for large files. |
 | Icons | `lucide-react` (SVG, tree-shakeable) | Replaces the mockup's Material Symbols Google Fonts dependency. |
 | Fonts | `@fontsource/inter` (self-hosted WOFF2) | Replaces the mockup's Google Fonts CDN link — app has **zero runtime network requests** after first load, verified in Network tab. |
-| Testing | Vitest | Pure-logic modules (categorization, clustering, column-guessing, dedup) are unit tested — 24 tests passing as of last verification. |
+| Testing | Vitest | Pure-logic modules (categorization, clustering, column-guessing, dedup) are unit tested — 30 tests passing as of last verification. |
 | Charts | Hand-rolled SVG (no charting library) | Matches the existing `CoverageRingCard` technique; `dataviz` skill's validated categorical palette used for the pie chart, run through its contrast/CVD validator script against this app's actual surface color. |
 
 ## 3. Data model & IndexedDB schema
@@ -383,6 +383,75 @@ from a side-by-side `md:flex-row` chart+legend to always-stacked
 (chart-on-top, single-column legend list) since it now lives in a narrow
 column rather than full-width main content.
 
+### Phase 5: personalized rules backup/restore
+
+**Why**: user-labeled `categoryRules` already persist indefinitely in
+IndexedDB — closing/reopening the browser doesn't lose them, so "does the
+system get better over time" was already true. The actual gap (confirmed
+with the user before building this) was **portability**: rules live in one
+browser only, with no way to back them up or carry them to a new browser or
+machine. A literal "auto-write a file when the browser session closes" isn't
+implementable client-side (no reliable unload-time file-write hook, and the
+File System Access API is Chrome/Edge-only — the same reason the master
+ledger uses IndexedDB instead of it, §9). So this is **user-triggered
+export/import**, not automatic background writing.
+
+- **`lib/categorization/personalizedRules.ts`** (+`.test.ts`) —
+  `exportPersonalizedRules(categoryRules)` filters to `source: 'user-labeled'`
+  and strips internal metadata (confidence/timesApplied/createdAt/etc. are
+  usage stats, not portable teaching data), producing the **same shape as
+  `seedMerchantCategories.json`** (`{ pattern, matchType, category }[]`) —
+  deliberately, so it's a directly comparable personal counterpart to the
+  master list, not a different format. `parsePersonalizedRules(json)`
+  validates on import and **silently drops malformed entries** rather than
+  failing the whole file — a hand-edit typo in one row shouldn't lose every
+  other rule.
+- **`downloadJson()`** (`lib/export/downloadJson.ts`) — generic JSON-blob
+  download, sibling to the existing `downloadTransactionsCsv`.
+- **Store**: `exportRules()` downloads
+  `personalized-merchant-categories.json`. `importRules(file)` upserts by
+  `matchType:pattern` key (update-in-place if a rule for that exact
+  pattern+matchType already exists, else create), persists to IndexedDB, and
+  **re-runs categorization for any currently-uncategorized transaction**
+  against the updated rule set (same reseed pattern as `loadInitialData` —
+  `categorizeTransaction` is a no-op for already-categorized rows, so this
+  only fills gaps, never overwrites an existing categorization).
+- **`importRules` returns a result** (`{ importedCount } | { error }`)
+  instead of writing to the store's shared `uploadError`/`actionMessage`
+  fields. **A real bug was caught during verification**: those fields are
+  also read by `ActionsBar` and `CsvUploadPanel` — an early version set them
+  from `importRules`, and a "rules imported" message leaked into the
+  unrelated `ActionsBar` (visible under "Save to All-Time History"). Fixed
+  by having `RulesBackupCard` keep its own local feedback state instead.
+- **`RulesBackupCard.tsx`** (new, in `ReportSidebar`) — shows a count of
+  learned rules, "Download"/"Restore" buttons (Download disabled at zero
+  rules), a hidden file input for restore. Verified live: importing a file
+  with one new pattern and one pattern matching an existing rule correctly
+  upserted (count went from 3 → 4, not 3 → 5), and the existing rule's
+  category updated in place rather than creating a duplicate.
+
+### Phase 6: quick-pick category chips on merchant labeling
+
+`ClusterLabelCard.tsx` (the per-merchant card in "Categorize your most common
+merchants") now shows a row of one-click category chips above the full
+`CategoryDropdown`, so the common case doesn't need opening the dropdown at
+all. Clicking a chip calls the same `handleApply`/`labelCluster` path as
+picking from the dropdown — no new store logic needed.
+
+**Went through two designs before landing on the final one.** First pass was
+data-driven: a new `computeTopCategories()` (`lib/categorization/
+topCategories.ts`, +tests) ranked categories by how often they're actually
+used across the user's transactions, surfaced via a `useTopCategories`
+selector. Verified live (uploaded a test merchant, confirmed the top-5 chips
+matched real usage frequency, one click correctly bulk-categorized all
+matching rows). **The user then asked for a fixed set instead**: Restaurant,
+Groceries, Travel, Shopping, always in that order, not usage-ranked. Swapped
+to a `QUICK_PICK_CATEGORIES` constant local to `ClusterLabelCard.tsx`,
+filtered against the actual `categories` list (so a chip never shows for a
+category that doesn't exist in a given setup) — and **removed `topCategories.ts`,
+its test file, and the `useTopCategories` selector entirely** rather than
+leaving the now-unused data-driven version in the codebase as dead code.
+
 ## 9. Key design decisions & rationale (quick-reference)
 
 | Decision | Why |
@@ -393,6 +462,9 @@ column rather than full-width main content.
 | Category `kind` (income/expense/transfer/investment) is per-category, not per-transaction (§8 Phase 4) | User's explicit ask: classify by category, reclassifying "Transfers" once should fix every transaction in it, not require relabeling each row. |
 | Transfers/investments excluded from Net, shown as their own report bars (§8 Phase 4) | User's explicit ask: moving your own money between accounts (or into investments) isn't income or spending — counting it as either inflates both sides of the report. |
 | `BudgetLocal` app name kept as-is through the copy pass (§8 Phase 4) | It's already plain and it's carrying the privacy positioning ("Local") that's the app's core differentiator — a generic-sounding rename would lose that signal. |
+| Personalized rules export/import is user-triggered, not an automatic background file write (§8 Phase 5) | A page can't reliably write a file on browser-close with no backend; the only client-side file-write API (File System Access) is Chrome/Edge-only, which the app already ruled out once for the master ledger. |
+| Personalized rules file mirrors `seedMerchantCategories.json`'s exact shape (§8 Phase 5) | Makes it a directly comparable personal counterpart to the master list — same `{pattern, matchType, category}` fields, no separate format to learn or reconcile. |
+| Quick-pick category chips are a fixed list, not usage-ranked (§8 Phase 6) | User's explicit ask, after trying the data-driven version — a predictable, always-the-same-order set of chips beat a personalized-but-shifting one for this use case. |
 | Self-hosted fonts/icons | Mockup used Google Fonts/Material Symbols CDN — conflicts with "offline after first load." |
 | IndexedDB over localStorage | Thousands of rows; localStorage's sync string-only 5MB quota isn't viable. |
 | 7-column export (raw_description added) | Explicit user request, deviates from PRD's stated 6 columns, for cross-checking exported rows against the original statement text. |
@@ -423,7 +495,7 @@ src/
 │   ├── CoverageRingCard.tsx
 │   ├── CoverageGateBanner.tsx
 │   ├── TopUncategorizedQueue.tsx
-│   ├── ClusterLabelCard.tsx
+│   ├── ClusterLabelCard.tsx        fixed quick-pick chips: Restaurant/Groceries/Travel/Shopping (§8 Phase 6)
 │   └── ReviewTable.tsx             multi-select always on (no more selectable prop)
 ├── features/budget/           (formerly features/categorize/)
 │   ├── MainPage.tsx                the whole app's single page (formerly CategorizeTabPage.tsx)
@@ -431,6 +503,7 @@ src/
 │   ├── CategoryPieChart.tsx         Other-promotion logic (§8), always-stacked layout (§8 Phase 4)
 │   ├── IncomeExpenseSummary.tsx     4 bars: Income/Expenses/Transfers/Investments + Net (§8 Phase 4)
 │   ├── CategoryKindEditor.tsx       §8 Phase 4: per-category income/expense/transfer/investment picker
+│   ├── RulesBackupCard.tsx          §8 Phase 5: export/import personalized-rules JSON, local feedback state
 │   └── ActionsBar.tsx               formerly CategorizeActionsBar.tsx
 ├── lib/csv/
 │   ├── parseCsvFile.ts, columnMapping.ts (+.test), buildTransactions.ts
@@ -438,10 +511,11 @@ src/
 ├── lib/categorization/
 │   ├── categorizationEngine.ts (+.test), clustering.ts (+.test), coverage.ts, seedData.ts
 │   ├── incomeExpense.ts (+.test)    §8 Phase 4: computeIncomeExpenseBreakdown
+│   ├── personalizedRules.ts (+.test) §8 Phase 5: export/parse personalized-rules JSON
 ├── lib/db/
 │   ├── schema.ts (idb schema, v2), repository.ts (CRUD)
 ├── lib/export/
-│   ├── exportTransactionsCsv.ts, consolidation.ts (+.test)
+│   ├── exportTransactionsCsv.ts, consolidation.ts (+.test), downloadJson.ts (§8 Phase 5)
 ├── data/seedMerchantCategories.json   user-curated, don't silently edit
 ├── store/
 │   ├── useBudgetStore.ts     central Zustand store, all actions
@@ -462,15 +536,16 @@ testdata/                     gitignored — real personal bank CSVs, local-only
 - Branch: `feat/categorize-tab` (checked out locally). **3 commits ahead of
   `origin/feat/categorize-tab` — not yet pushed**: `b83d9a8` (pie chart
   Other-promotion, income vs. expenses, multi-file import review — §8
-  "Post-launch fixes"), `b709ebd` (single-page merge — §8), and whatever
-  follows for the copy/naming pass (§ pending). Push when the user asks.
+  "Post-launch fixes"), `b709ebd` (single-page merge — §8), `a231f7f` (copy
+  pass + income/expense/transfer/investment split + report sidebar — §8
+  Phase 4). Push when the user asks.
 - PR open/merge status for `feat/categorize-tab` / `feat/training-tab` is
   **unconfirmed** — `gh` CLI isn't installed on this machine and the repo
   returns 404 on unauthenticated `WebFetch` (private repo), so check the
   GitHub UI directly. Note `feat/training-tab`'s underlying tab UI no longer
   exists on `feat/categorize-tab` post-merge (§8) — reconcile deliberately if
   both branches are ever merged to `main`, not by accident.
-- `npm run test` (24 tests) and `npm run build` both passing as of last check.
+- `npm run test` (30 tests) and `npm run build` both passing as of last check.
 - Local dev: `cd /Users/shruthinayak/Documents/offline-budget-tracker && npm run dev`
   → `http://localhost:5173/offline-budget-tracker/` (note the base path). nvm was
   installed this session (`~/.nvm`, appended to `~/.zshrc`) since this machine had
