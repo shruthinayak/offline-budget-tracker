@@ -14,7 +14,7 @@ export function ActionsBar() {
   function handleStartNewBatch() {
     if (
       window.confirm(
-        'Clear this batch to start a new month? This removes these transactions from the working view — download or consolidate first if you want to keep a copy.',
+        'Start a new month? This clears the transactions you’re currently viewing — download or save them to your history first if you want to keep a copy.',
       )
     ) {
       void startNewBatch()
@@ -30,7 +30,7 @@ export function ActionsBar() {
           className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low px-4 py-2.5 text-body-sm font-medium text-on-surface hover:bg-surface-container-high"
         >
           <Download size={18} />
-          Download CSV
+          Download Transactions
         </button>
         <button
           type="button"
@@ -38,7 +38,7 @@ export function ActionsBar() {
           className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-body-sm font-medium text-on-primary hover:opacity-90"
         >
           <Archive size={18} />
-          Consolidated Transactions
+          Save to All-Time History
         </button>
         <button
           type="button"

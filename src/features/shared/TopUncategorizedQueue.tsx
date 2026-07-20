@@ -9,11 +9,11 @@ export function TopUncategorizedQueue() {
   return (
     <section className="mb-6">
       <h2 className="mb-3 text-headline-sm text-on-surface">
-        Label the most recurring uncategorized merchants
+        Categorize your most common merchants
       </h2>
       <p className="mb-4 text-body-sm text-on-surface-variant">
-        Labeling one of these applies to every matching transaction at once, so a few labels here cover a
-        lot of rows.
+        Setting a category here applies to every matching transaction at once, so a few choices cover a
+        lot of ground.
       </p>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {clusters.map((cluster) => (

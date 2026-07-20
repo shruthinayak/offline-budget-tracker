@@ -26,7 +26,7 @@ import {
   putTransactions,
   setMeta,
 } from '../lib/db/repository'
-import type { Category, CategoryRule, SourceFile, Transaction } from '../types/models'
+import type { Category, CategoryKind, CategoryRule, SourceFile, Transaction } from '../types/models'
 
 /** A just-imported (or being-corrected) file, shown as a dismissible,
  *  editable review card — never blocks the import itself. */
@@ -68,6 +68,7 @@ interface BudgetStoreState {
   editTransactionCategory: (id: string, category: string) => Promise<void>
   editTransactionCategories: (ids: string[], category: string) => Promise<void>
   addCustomCategory: (name: string) => Promise<void>
+  setCategoryKind: (name: string, kind: CategoryKind) => Promise<void>
   exportCsv: () => void
   consolidateAndDownload: () => Promise<void>
   startNewBatch: () => Promise<void>
@@ -369,9 +370,18 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
     const { categories } = get()
     if (categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) return
 
-    const category: Category = { name: trimmed, color: null, isBuiltIn: false, createdAt: Date.now() }
+    const category: Category = { name: trimmed, color: null, isBuiltIn: false, createdAt: Date.now(), kind: 'expense' }
     await putCategory(category)
     set({ categories: [...categories, category] })
+  },
+
+  async setCategoryKind(name, kind) {
+    const { categories } = get()
+    const target = categories.find((c) => c.name === name)
+    if (!target || target.kind === kind) return
+    const updated: Category = { ...target, kind }
+    await putCategory(updated)
+    set({ categories: categories.map((c) => (c.name === name ? updated : c)) })
   },
 
   exportCsv() {

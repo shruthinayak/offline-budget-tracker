@@ -1,4 +1,5 @@
 import { getDb } from './schema'
+import { inferCategoryKind } from '../categorization/seedData'
 import type { Transaction, SourceFile, CategoryRule, Category } from '../../types/models'
 
 export async function getAllTransactions(): Promise<Transaction[]> {
@@ -64,7 +65,9 @@ export async function deleteCategoryRules(ids: string[]): Promise<void> {
 }
 
 export async function getAllCategories(): Promise<Category[]> {
-  return (await getDb()).getAll('categories')
+  const rows = await (await getDb()).getAll('categories')
+  // Categories persisted before `kind` existed default by name.
+  return rows.map((c) => ({ ...c, kind: c.kind ?? inferCategoryKind(c.name) }))
 }
 
 export async function putCategory(category: Category): Promise<void> {
