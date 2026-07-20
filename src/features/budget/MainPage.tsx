@@ -1,3 +1,4 @@
+import { PlayCircle } from 'lucide-react'
 import { OneTimeSetupBanner } from '../shared/OneTimeSetupBanner'
 import { CsvUploadPanel } from '../shared/CsvUploadPanel'
 import { ImportReviewCard } from '../shared/ImportReviewCard'
@@ -20,6 +21,15 @@ export function MainPage() {
           Upload statement CSVs to auto-categorize them using what it&apos;s already learned —
           correcting a category teaches it immediately, so it gets smarter every month.
         </p>
+        <a
+          href="https://youtu.be/Or0QKfRIBck"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-flex items-center gap-2 text-label-md font-medium text-primary hover:underline"
+        >
+          <PlayCircle size={18} />
+          Watch what BudgetLocal offers
+        </a>
       </div>
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
