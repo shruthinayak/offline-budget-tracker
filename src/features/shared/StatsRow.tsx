@@ -11,7 +11,7 @@ export function StatsRow() {
       <div className="relative flex flex-col overflow-hidden rounded-xl bg-surface-container-lowest p-6 custom-shadow">
         <Database size={64} className="absolute -bottom-3 -right-3 text-primary/10" />
         <span className="mb-2 text-label-md uppercase tracking-wider text-on-surface-variant">
-          Total Datapoints
+          Transactions
         </span>
         <h3 className="text-headline-lg">{total.toLocaleString()}</h3>
       </div>
@@ -21,7 +21,7 @@ export function StatsRow() {
       <div className="relative flex flex-col overflow-hidden rounded-xl bg-surface-container-lowest p-6 custom-shadow">
         <AlertTriangle size={64} className="absolute -bottom-3 -right-3 text-tertiary/10" />
         <span className="mb-2 text-label-md uppercase tracking-wider text-on-surface-variant">
-          Requires Label
+          Needs a Category
         </span>
         <div className="flex items-center gap-3">
           <h3 className="text-headline-lg">{remaining.toLocaleString()}</h3>

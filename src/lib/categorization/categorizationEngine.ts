@@ -22,10 +22,15 @@ export function findMatchingRule(normalizedName: string, rules: CategoryRule[]):
   return candidates[0] ?? null
 }
 
-export function categorizeTransaction(txn: Transaction, rules: CategoryRule[]): Transaction {
+export function categorizeTransaction(
+  txn: Transaction,
+  rules: CategoryRule[],
+  onRuleApplied?: (rule: CategoryRule) => void,
+): Transaction {
   if (txn.category) return txn
   const rule = findMatchingRule(txn.normalizedName, rules)
   if (!rule) return txn
+  onRuleApplied?.(rule)
   return {
     ...txn,
     category: rule.category,
@@ -33,6 +38,10 @@ export function categorizeTransaction(txn: Transaction, rules: CategoryRule[]): 
   }
 }
 
-export function categorizeAll(transactions: Transaction[], rules: CategoryRule[]): Transaction[] {
-  return transactions.map((t) => categorizeTransaction(t, rules))
+export function categorizeAll(
+  transactions: Transaction[],
+  rules: CategoryRule[],
+  onRuleApplied?: (rule: CategoryRule) => void,
+): Transaction[] {
+  return transactions.map((t) => categorizeTransaction(t, rules, onRuleApplied))
 }

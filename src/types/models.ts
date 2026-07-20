@@ -1,6 +1,12 @@
 export type MatchType = 'exact' | 'contains' | 'startsWith'
 export type CategorySource = 'rule' | 'heuristic' | 'manual' | null
 export type RuleSource = 'user-labeled' | 'seed-heuristic'
+export type DatasetType = 'training' | 'categorize'
+/** How a category counts toward the income/expenses report. Money moved
+ *  between the user's own accounts ('transfer') or into investments
+ *  ('investment') is neither income nor an expense — it's tracked in its
+ *  own report bar instead. */
+export type CategoryKind = 'income' | 'expense' | 'transfer' | 'investment'
 
 export interface Transaction {
   id: string
@@ -15,6 +21,9 @@ export interface Transaction {
   sourceFileId: string
   sourceFileName: string
   createdAt: number
+  /** Which tab this row belongs to. Rows persisted before this field existed
+   *  are treated as 'training' at read time (see repository.ts). */
+  datasetType: DatasetType
 }
 
 export interface SourceFile {
@@ -44,6 +53,7 @@ export interface Category {
   color: string | null
   isBuiltIn: boolean
   createdAt: number
+  kind: CategoryKind
 }
 
 export interface UncategorizedCluster {

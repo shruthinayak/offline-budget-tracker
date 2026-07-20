@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categorizeTransaction, findMatchingRule } from './categorizationEngine'
+import { categorizeAll, categorizeTransaction, findMatchingRule } from './categorizationEngine'
 import { buildSeedCategoryRules } from './seedData'
 import type { Transaction } from '../../types/models'
 
@@ -17,6 +17,7 @@ function makeTransaction(overrides: Partial<Transaction>): Transaction {
     sourceFileId: 'file-1',
     sourceFileName: 'test.csv',
     createdAt: 0,
+    datasetType: 'training',
     ...overrides,
   }
 }
@@ -49,5 +50,35 @@ describe('categorization precedence', () => {
     const txn = makeTransaction({ normalizedName: 'uber eats', category: 'Manual Override' })
     const result = categorizeTransaction(txn, rules)
     expect(result.category).toBe('Manual Override')
+  })
+})
+
+describe('onRuleApplied usage-tracking callback', () => {
+  const rules = buildSeedCategoryRules()
+
+  it('fires once per transaction a rule was used to categorize', () => {
+    const applied: string[] = []
+    const transactions = [
+      makeTransaction({ id: '1', normalizedName: 'uber eats san francisco' }),
+      makeTransaction({ id: '2', normalizedName: 'uber trip' }),
+      makeTransaction({ id: '3', normalizedName: 'uber eats toronto' }),
+    ]
+    categorizeAll(transactions, rules, (rule) => applied.push(rule.id))
+
+    expect(applied).toHaveLength(3)
+    // The two "uber eats" rows should have matched the same Takeout rule.
+    expect(applied[0]).toBe(applied[2])
+    expect(applied[1]).not.toBe(applied[0])
+  })
+
+  it('does not fire for unmatched or already-categorized transactions', () => {
+    const applied: string[] = []
+    const transactions = [
+      makeTransaction({ id: '1', normalizedName: 'totally unknown merchant' }),
+      makeTransaction({ id: '2', normalizedName: 'uber eats', category: 'Already Set' }),
+    ]
+    categorizeAll(transactions, rules, (rule) => applied.push(rule.id))
+
+    expect(applied).toHaveLength(0)
   })
 })
