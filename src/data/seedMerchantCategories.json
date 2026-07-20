@@ -114,7 +114,5 @@
   { "pattern": "td atm dep", "matchType": "contains", "category": "Transfers" },
   { "pattern": "pts to", "matchType": "contains", "category": "Transfers" },
   { "pattern": "ssv to", "matchType": "contains", "category": "Transfers" },
-  { "pattern": "mallappa preeta", "matchType": "contains", "category": "Transfers" },
-  { "pattern": "nayak shruthi r", "matchType": "contains", "category": "Transfers" },
   { "pattern": "cibc cpd", "matchType": "contains", "category": "Transfers" }
 ]
