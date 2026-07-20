@@ -534,26 +534,32 @@ testdata/                     gitignored — real personal bank CSVs, local-only
 ## 11. Current repo/git state
 
 - Branch: `feat/categorize-tab`, **pushed** — `origin/feat/categorize-tab` is
-  up to date with local (`b71971f` at the tip). Full commit list since
+  up to date with local (`4aaadf3` at the tip). Full commit list since
   `main`: `51d4231` (Training tab), `bdf10a3` (Categorize tab), `b83d9a8`
   (pie chart Other-promotion / income vs. expenses / multi-file import
   review — §8 "Post-launch fixes"), `b709ebd` (single-page merge — §8),
   `a231f7f` (copy pass + income/expense/transfer/investment split + report
   sidebar — §8 Phase 4), `b71971f` (rules backup/restore + quick-pick chips
-  — §8 Phases 5–6).
-- **PR not yet created** — `gh` CLI isn't installed on this machine and
-  Claude in Chrome wasn't connected in-session (extension not reachable), so
-  it couldn't be created programmatically this round; the user needs to open
-  it from the pushed branch. Note `feat/training-tab`'s underlying tab UI no
-  longer exists on `feat/categorize-tab` post-merge (§8) — reconcile
-  deliberately if both branches are ever merged to `main`, not by accident.
+  — §8 Phases 5–6), `4aaadf3` (this SPEC.md update).
+- **[PR #2](https://github.com/shruthinayak/offline-budget-tracker/pull/2)
+  open** — `feat/categorize-tab` → `main`, created via `gh pr create`.
+  [PR #1](https://github.com/shruthinayak/offline-budget-tracker/pull/1)
+  (`feat/training-tab` → `main`) is **already merged** — note
+  `feat/training-tab`'s underlying tab UI no longer exists on
+  `feat/categorize-tab` post-merge (§8), so PR #2 supersedes it rather than
+  building on top of it.
 - `npm run test` (30 tests) and `npm run build` both passing as of last check.
 - Local dev: `cd /Users/shruthinayak/Documents/offline-budget-tracker && npm run dev`
   → `http://localhost:5173/offline-budget-tracker/` (note the base path). nvm was
-  installed this session (`~/.nvm`, appended to `~/.zshrc`) since this machine had
-  no Node originally — a fresh terminal should have it on `PATH` automatically.
-- GitHub Pages is **not yet live** — needs commit → push → merge, plus a one-time
-  manual "Settings → Pages → Source = GitHub Actions" toggle only the user can do.
+  installed earlier this session (`~/.nvm`, appended to `~/.zshrc`) since this
+  machine had no Node originally. `gh` CLI was installed via Homebrew
+  (`/opt/homebrew/bin/gh`, authenticated as `shruthinayak`) partway through
+  this session too — like nvm, a **fresh terminal** should have it on `PATH`
+  automatically; if a shell predates the install, run
+  `export PATH="/opt/homebrew/bin:$PATH"` first.
+- GitHub Pages is **not yet live** — commit/push/PR are done (above); still
+  needs PR #2 merged, plus a one-time manual "Settings → Pages → Source =
+  GitHub Actions" toggle only the user can do.
 
 ## 12. Known gaps & deferred work
 
