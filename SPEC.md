@@ -533,18 +533,20 @@ testdata/                     gitignored — real personal bank CSVs, local-only
 
 ## 11. Current repo/git state
 
-- Branch: `feat/categorize-tab` (checked out locally). **3 commits ahead of
-  `origin/feat/categorize-tab` — not yet pushed**: `b83d9a8` (pie chart
-  Other-promotion, income vs. expenses, multi-file import review — §8
-  "Post-launch fixes"), `b709ebd` (single-page merge — §8), `a231f7f` (copy
-  pass + income/expense/transfer/investment split + report sidebar — §8
-  Phase 4). Push when the user asks.
-- PR open/merge status for `feat/categorize-tab` / `feat/training-tab` is
-  **unconfirmed** — `gh` CLI isn't installed on this machine and the repo
-  returns 404 on unauthenticated `WebFetch` (private repo), so check the
-  GitHub UI directly. Note `feat/training-tab`'s underlying tab UI no longer
-  exists on `feat/categorize-tab` post-merge (§8) — reconcile deliberately if
-  both branches are ever merged to `main`, not by accident.
+- Branch: `feat/categorize-tab`, **pushed** — `origin/feat/categorize-tab` is
+  up to date with local (`b71971f` at the tip). Full commit list since
+  `main`: `51d4231` (Training tab), `bdf10a3` (Categorize tab), `b83d9a8`
+  (pie chart Other-promotion / income vs. expenses / multi-file import
+  review — §8 "Post-launch fixes"), `b709ebd` (single-page merge — §8),
+  `a231f7f` (copy pass + income/expense/transfer/investment split + report
+  sidebar — §8 Phase 4), `b71971f` (rules backup/restore + quick-pick chips
+  — §8 Phases 5–6).
+- **PR not yet created** — `gh` CLI isn't installed on this machine and
+  Claude in Chrome wasn't connected in-session (extension not reachable), so
+  it couldn't be created programmatically this round; the user needs to open
+  it from the pushed branch. Note `feat/training-tab`'s underlying tab UI no
+  longer exists on `feat/categorize-tab` post-merge (§8) — reconcile
+  deliberately if both branches are ever merged to `main`, not by accident.
 - `npm run test` (30 tests) and `npm run build` both passing as of last check.
 - Local dev: `cd /Users/shruthinayak/Documents/offline-budget-tracker && npm run dev`
   → `http://localhost:5173/offline-budget-tracker/` (note the base path). nvm was
