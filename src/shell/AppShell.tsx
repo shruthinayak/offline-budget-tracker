@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
-import { Wallet, ShieldCheck } from 'lucide-react'
+import { Wallet, ShieldCheck, Coffee } from 'lucide-react'
 import { useBudgetStore } from '../store/useBudgetStore'
 import { MainPage } from '../features/budget/MainPage'
+
+const COFFEE_LINK = 'https://buy.stripe.com/8x200canRdFX60BersgA800'
 
 export function AppShell() {
   const isLoading = useBudgetStore((state) => state.isLoading)
@@ -21,12 +23,23 @@ export function AppShell() {
             </div>
             <span className="text-headline-sm font-bold text-primary">BudgetLocal</span>
           </div>
-          <div
-            className="hidden shrink-0 items-center gap-2 text-on-surface-variant sm:flex"
-            title="100% local — nothing leaves your browser"
-          >
-            <ShieldCheck size={20} />
-            <span className="hidden text-label-md md:inline">Local-only</span>
+          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+            <div
+              className="hidden shrink-0 items-center gap-2 text-on-surface-variant sm:flex"
+              title="100% local — nothing leaves your browser"
+            >
+              <ShieldCheck size={20} />
+              <span className="hidden text-label-md md:inline">Local-only</span>
+            </div>
+            <a
+              href={COFFEE_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex shrink-0 items-center gap-2 rounded-full bg-yellow-400 px-3 py-1.5 text-label-md font-medium text-neutral-900 transition hover:bg-yellow-300"
+            >
+              <Coffee size={16} />
+              <span className="hidden sm:inline">Buy me a coffee</span>
+            </a>
           </div>
         </div>
       </header>
