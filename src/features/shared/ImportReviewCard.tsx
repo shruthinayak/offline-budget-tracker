@@ -2,7 +2,6 @@ import { CheckCircle2, X } from 'lucide-react'
 import { useBudgetStore } from '../../store/useBudgetStore'
 import type { ImportedFileReview } from '../../store/useBudgetStore'
 import type { CanonicalColumn } from '../../lib/csv/columnMapping'
-import type { DatasetType } from '../../types/models'
 
 const FIELD_LABELS: { field: CanonicalColumn; label: string }[] = [
   { field: 'date', label: 'Date' },
@@ -14,25 +13,20 @@ const FIELD_LABELS: { field: CanonicalColumn; label: string }[] = [
 
 const NONE = ''
 
-interface ImportReviewCardProps {
-  datasetType: DatasetType
-}
-
 /** Non-blocking: every queued file is already imported using auto-guessed
  *  columns by the time its card renders. Every edit here immediately
  *  re-applies against that same source file rather than gating the import
  *  on confirmation. `recentImports` holds one entry per file, so uploading
  *  a batch shows one editable card per file — not just the last one. */
-export function ImportReviewCard({ datasetType }: ImportReviewCardProps) {
+export function ImportReviewCard() {
   const recentImports = useBudgetStore((state) => state.recentImports)
   const uploadQueueLength = useBudgetStore((state) => state.uploadQueue.length)
 
-  const reviews = recentImports.filter((r) => r.datasetType === datasetType)
-  if (reviews.length === 0) return null
+  if (recentImports.length === 0) return null
 
   return (
     <div className="mb-6 flex flex-col gap-3">
-      {reviews.map((review) => (
+      {recentImports.map((review) => (
         <SingleImportReviewCard key={review.sourceFileId} review={review} />
       ))}
       {uploadQueueLength > 0 && (

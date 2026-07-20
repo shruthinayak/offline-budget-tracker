@@ -1,13 +1,8 @@
 import { useRef, useState } from 'react'
 import { UploadCloud } from 'lucide-react'
 import { useBudgetStore } from '../../store/useBudgetStore'
-import type { DatasetType } from '../../types/models'
 
-interface CsvUploadPanelProps {
-  datasetType: DatasetType
-}
-
-export function CsvUploadPanel({ datasetType }: CsvUploadPanelProps) {
+export function CsvUploadPanel() {
   const queueFiles = useBudgetStore((state) => state.queueFiles)
   const uploadError = useBudgetStore((state) => state.uploadError)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -16,7 +11,7 @@ export function CsvUploadPanel({ datasetType }: CsvUploadPanelProps) {
   function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
     const csvFiles = Array.from(fileList).filter((f) => f.name.toLowerCase().endsWith('.csv'))
-    if (csvFiles.length > 0) void queueFiles(csvFiles, datasetType)
+    if (csvFiles.length > 0) void queueFiles(csvFiles)
   }
 
   return (

@@ -1,24 +1,23 @@
-import { Download, GraduationCap, Archive, Trash2 } from 'lucide-react'
+import { Download, Archive, Trash2 } from 'lucide-react'
 import { useBudgetStore } from '../../store/useBudgetStore'
 import { useTotalDatapoints } from '../../store/selectors'
 
-export function CategorizeActionsBar() {
-  const totalDatapoints = useTotalDatapoints('categorize')
-  const exportCategorizedCsv = useBudgetStore((state) => state.exportCategorizedCsv)
-  const updateTrainingDataFromCategorized = useBudgetStore((state) => state.updateTrainingDataFromCategorized)
+export function ActionsBar() {
+  const totalDatapoints = useTotalDatapoints()
+  const exportCsv = useBudgetStore((state) => state.exportCsv)
   const consolidateAndDownload = useBudgetStore((state) => state.consolidateAndDownload)
-  const clearCategorizeBatch = useBudgetStore((state) => state.clearCategorizeBatch)
+  const startNewBatch = useBudgetStore((state) => state.startNewBatch)
   const actionMessage = useBudgetStore((state) => state.actionMessage)
 
   if (totalDatapoints === 0) return null
 
-  function handleClearBatch() {
+  function handleStartNewBatch() {
     if (
       window.confirm(
         'Clear this batch to start a new month? This removes these transactions from the working view — download or consolidate first if you want to keep a copy.',
       )
     ) {
-      void clearCategorizeBatch()
+      void startNewBatch()
     }
   }
 
@@ -27,19 +26,11 @@ export function CategorizeActionsBar() {
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          onClick={exportCategorizedCsv}
+          onClick={exportCsv}
           className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low px-4 py-2.5 text-body-sm font-medium text-on-surface hover:bg-surface-container-high"
         >
           <Download size={18} />
-          Download Categorized CSV
-        </button>
-        <button
-          type="button"
-          onClick={() => void updateTrainingDataFromCategorized()}
-          className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low px-4 py-2.5 text-body-sm font-medium text-on-surface hover:bg-surface-container-high"
-        >
-          <GraduationCap size={18} />
-          Update Training Data
+          Download CSV
         </button>
         <button
           type="button"
@@ -51,7 +42,7 @@ export function CategorizeActionsBar() {
         </button>
         <button
           type="button"
-          onClick={handleClearBatch}
+          onClick={handleStartNewBatch}
           className="ml-auto flex items-center gap-2 rounded-lg px-4 py-2.5 text-body-sm font-medium text-on-surface-variant hover:bg-surface-container-high"
         >
           <Trash2 size={16} />

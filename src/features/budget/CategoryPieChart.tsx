@@ -1,10 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useDatasetTransactions } from '../../store/selectors'
-import type { DatasetType } from '../../types/models'
-
-interface CategoryPieChartProps {
-  datasetType: DatasetType
-}
+import { useBudgetStore } from '../../store/useBudgetStore'
 
 // Validated categorical palette (dataviz skill reference set) — fixed hue
 // order is the CVD-safety mechanism. The last slot doubles as the shared
@@ -43,8 +38,8 @@ const RADIUS = (SIZE - STROKE) / 2
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 const GAP_DEGREES = 2.5
 
-export function CategoryPieChart({ datasetType }: CategoryPieChartProps) {
-  const transactions = useDatasetTransactions(datasetType)
+export function CategoryPieChart() {
+  const transactions = useBudgetStore((state) => state.transactions)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
   // Persists color assignments per category identity across renders so that
   // promoting a category out of "Other" (or demoting one back in) never
