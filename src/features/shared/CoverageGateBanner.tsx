@@ -13,10 +13,10 @@ export function CoverageGateBanner() {
   return (
     <div className="relative mb-6 flex items-center justify-between gap-6 overflow-hidden rounded-xl bg-gradient-to-br from-primary-container to-primary p-6 text-on-primary">
       <div className="relative z-10">
-        <h4 className="text-headline-sm">You&apos;ve hit {Math.round(coverage * 100)}% coverage 🎉</h4>
+        <h4 className="text-headline-sm">{Math.round(coverage * 100)}% of your spending is categorized 🎉</h4>
         <p className="mt-1 max-w-md text-body-sm text-on-primary-container">
-          You can keep labeling recurring merchants below, or jump straight to the review table and export
-          this batch now.
+          You can keep categorizing recurring merchants below, or jump straight to the table and download
+          your transactions now.
         </p>
       </div>
       <button
@@ -24,7 +24,7 @@ export function CoverageGateBanner() {
         onClick={exportCsv}
         className="relative z-10 shrink-0 rounded-lg bg-white px-5 py-2.5 text-body-sm font-bold text-primary"
       >
-        Download CSV
+        Download Transactions
       </button>
       <Sparkles size={140} className="absolute -right-4 -top-4 opacity-20" />
     </div>

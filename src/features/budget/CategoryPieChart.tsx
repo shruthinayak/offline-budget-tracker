@@ -128,9 +128,9 @@ export function CategoryPieChart() {
   let cumulative = 0
 
   return (
-    <section className="mb-6 rounded-xl bg-surface-container-lowest p-6 custom-shadow">
+    <section className="rounded-xl bg-surface-container-lowest p-6 custom-shadow">
       <h2 className="mb-4 text-headline-sm text-on-surface">Spending by category</h2>
-      <div className="flex flex-col items-center gap-8 md:flex-row md:items-start">
+      <div className="flex flex-col items-center gap-6">
         <div className="relative shrink-0">
           <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="-rotate-90">
             <circle
@@ -171,7 +171,7 @@ export function CategoryPieChart() {
           </div>
         </div>
 
-        <ul className="grid w-full grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+        <ul className="flex w-full flex-col gap-2">
           {slices.map((s) => (
             <li key={s.category} className="flex items-center gap-2">
               <label className="flex flex-1 cursor-pointer items-center gap-2 text-body-sm">

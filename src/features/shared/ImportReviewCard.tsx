@@ -50,10 +50,10 @@ function SingleImportReviewCard({ review }: { review: ImportedFileReview }) {
           <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-secondary" />
           <div>
             <p className="text-body-md font-medium text-on-surface">
-              Imported {review.rows.length} rows from {review.fileName}
+              Imported {review.rows.length} transactions from {review.fileName}
             </p>
             <p className="text-body-sm text-on-surface-variant">
-              Columns were auto-detected — check below and adjust if anything looks off.
+              We matched up the columns automatically — check below and fix anything that looks off.
             </p>
           </div>
         </div>

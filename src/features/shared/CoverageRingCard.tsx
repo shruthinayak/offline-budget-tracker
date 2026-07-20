@@ -14,7 +14,7 @@ export function CoverageRingCard() {
 
   return (
     <div className="relative flex flex-col overflow-hidden rounded-xl bg-surface-container-lowest p-6 custom-shadow">
-      <span className="mb-2 text-label-md uppercase tracking-wider text-on-surface-variant">Coverage</span>
+      <span className="mb-2 text-label-md uppercase tracking-wider text-on-surface-variant">Categorized</span>
       <div className="flex items-center gap-4">
         <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="shrink-0 -rotate-90">
           <circle

@@ -34,7 +34,7 @@ A third PRD feature (chat popup with an "Audit my expenses" preloaded action) ha
 | CSV parsing | PapaParse | Handles real-world quoting/escaping; worker-thread parsing for large files. |
 | Icons | `lucide-react` (SVG, tree-shakeable) | Replaces the mockup's Material Symbols Google Fonts dependency. |
 | Fonts | `@fontsource/inter` (self-hosted WOFF2) | Replaces the mockup's Google Fonts CDN link — app has **zero runtime network requests** after first load, verified in Network tab. |
-| Testing | Vitest | Pure-logic modules (categorization, clustering, column-guessing, dedup) are unit tested — 19 tests passing as of last verification. |
+| Testing | Vitest | Pure-logic modules (categorization, clustering, column-guessing, dedup) are unit tested — 24 tests passing as of last verification. |
 | Charts | Hand-rolled SVG (no charting library) | Matches the existing `CoverageRingCard` technique; `dataviz` skill's validated categorical palette used for the pie chart, run through its contrast/CVD validator script against this app's actual surface color. |
 
 ## 3. Data model & IndexedDB schema
@@ -317,8 +317,9 @@ requirement rather than just refactoring internals.
   a `datasetType`-filtered subset, since there's no longer a permanent
   "training" bucket living alongside it. The durable memory is `categoryRules`
   (grows forever, survives batch-clearing) and `masterLedger` (the
-  append-only historical record via "Consolidated Transactions") — not the
-  `transactions` store itself. **Known side effect**: pre-merge browsers with
+  append-only historical record via "Save to All-Time History," renamed from
+  "Consolidated Transactions" in the copy pass below) — not the `transactions`
+  store itself. **Known side effect**: pre-merge browsers with
   old `datasetType: 'training'` rows now see those rows folded into the same
   working view as everything else (and subject to "Start a new month"
   clearing) — a one-time, harmless consequence of unifying the concept, not a
@@ -335,6 +336,53 @@ requirement rather than just refactoring internals.
   always on now; there was never a second, non-selectable usage site once the
   tabs merged.
 
+### Phase 4: copy pass, income/transfer/investment split, report sidebar
+
+**Copy pass** — every user-facing string was audited for ML/dev jargon a
+non-technical user wouldn't recognize and reworded. Notable renames: "Total
+Datapoints" → "Transactions," "Coverage" → "Categorized," "Requires Label" →
+"Needs a Category," "Download CSV" → "Download Transactions," "Consolidated
+Transactions" → "Save to All-Time History" (was a noun phrase that didn't
+read as an action — new label describes what clicking it actually does).
+"Label"/"labeling" language throughout (banner, recurring-merchant section)
+became "categorize"/"categorizing." **`BudgetLocal` itself and "Local-only"
+were deliberately kept** — the name carries the privacy positioning that's
+the app's core differentiator, and a generic rename would lose that signal.
+
+**Income/expense/transfer/investment split** — previously income vs. expenses
+was computed purely from amount sign (positive = income, negative = expense),
+which meant moving money between your own accounts, or into an investment
+account, inflated both sides. Fixed by giving every `Category` a `kind:
+'income' | 'expense' | 'transfer' | 'investment'` field (`types/models.ts`):
+- `inferCategoryKind()` (`seedData.ts`) assigns the default by name — `Income`
+  → income, `Transfers` → transfer, `Investments` → investment, everything
+  else → expense — used both to seed `buildSeedCategories()` and as a
+  read-time fallback in `repository.ts#getAllCategories` for categories
+  persisted before `kind` existed (same no-migration pattern as
+  `datasetType`/§3).
+- `computeIncomeExpenseBreakdown()` (`lib/categorization/incomeExpense.ts`,
+  +`.test.ts`) buckets transactions by their category's `kind`; an
+  uncategorized transaction (or one whose category has no recognized kind)
+  falls back to the amount-sign heuristic, preserving old behavior for the
+  unclassified case.
+- **`CategoryKindEditor.tsx`** (new, in `IncomeExpenseSummary`) — a
+  collapsed-by-default list of every category with a kind dropdown, so a user
+  can reclassify e.g. "Rent Payment" as a Transfer instead of an Expense.
+  Verified live: reclassifying "Shopping" as Transfer moved its dollar amount
+  out of the Expenses bar and into the Transfers bar immediately, no reload.
+- `IncomeExpenseSummary` now renders up to 4 bars (Income, Expenses, always
+  shown; Transfers, Investments, shown only when their total is > 0) plus Net
+  (Income − Expenses only — transfers/investments are deliberately excluded
+  from Net, since they're not spending).
+
+**Report sidebar** — `CategoryPieChart` and `IncomeExpenseSummary` moved out
+of the main column into a new `ReportSidebar.tsx` (`lg:w-[360px]`, stacks
+below the main column under the `lg` breakpoint) to declutter the main
+upload → review → export flow. `CategoryPieChart`'s internal layout changed
+from a side-by-side `md:flex-row` chart+legend to always-stacked
+(chart-on-top, single-column legend list) since it now lives in a narrow
+column rather than full-width main content.
+
 ## 9. Key design decisions & rationale (quick-reference)
 
 | Decision | Why |
@@ -342,6 +390,9 @@ requirement rather than just refactoring internals.
 | **Single-page flow, not the PRD's two header tabs** (§8) | The two tabs converged on doing the same job once corrections auto-taught the categorizer and a merchant seed list existed — kept as two doors into one room only added confusion. User confirmed explicitly; documented here as an intentional PRD deviation, not an oversight. |
 | Header (not the mockup's sidebar), even after the tab merge | Mockup's visual language (colors/shapes/shadows) was kept, layout wasn't — this survived the single-page merge even though there's nothing to switch between anymore. |
 | Every manual correction auto-teaches a rule (§8) | Point of the single-page merge: "taught to the categorizer as part of categorization," not a separate step. Single/bulk edits now go through the same `upsertUserRule` mechanism cluster-labeling always used. |
+| Category `kind` (income/expense/transfer/investment) is per-category, not per-transaction (§8 Phase 4) | User's explicit ask: classify by category, reclassifying "Transfers" once should fix every transaction in it, not require relabeling each row. |
+| Transfers/investments excluded from Net, shown as their own report bars (§8 Phase 4) | User's explicit ask: moving your own money between accounts (or into investments) isn't income or spending — counting it as either inflates both sides of the report. |
+| `BudgetLocal` app name kept as-is through the copy pass (§8 Phase 4) | It's already plain and it's carrying the privacy positioning ("Local") that's the app's core differentiator — a generic-sounding rename would lose that signal. |
 | Self-hosted fonts/icons | Mockup used Google Fonts/Material Symbols CDN — conflicts with "offline after first load." |
 | IndexedDB over localStorage | Thousands of rows; localStorage's sync string-only 5MB quota isn't viable. |
 | 7-column export (raw_description added) | Explicit user request, deviates from PRD's stated 6 columns, for cross-checking exported rows against the original statement text. |
@@ -376,14 +427,17 @@ src/
 │   └── ReviewTable.tsx             multi-select always on (no more selectable prop)
 ├── features/budget/           (formerly features/categorize/)
 │   ├── MainPage.tsx                the whole app's single page (formerly CategorizeTabPage.tsx)
-│   ├── CategoryPieChart.tsx         Other-promotion logic, §8's post-launch fixes
-│   ├── IncomeExpenseSummary.tsx
+│   ├── ReportSidebar.tsx            §8 Phase 4: pie chart + income/expense report, right column
+│   ├── CategoryPieChart.tsx         Other-promotion logic (§8), always-stacked layout (§8 Phase 4)
+│   ├── IncomeExpenseSummary.tsx     4 bars: Income/Expenses/Transfers/Investments + Net (§8 Phase 4)
+│   ├── CategoryKindEditor.tsx       §8 Phase 4: per-category income/expense/transfer/investment picker
 │   └── ActionsBar.tsx               formerly CategorizeActionsBar.tsx
 ├── lib/csv/
 │   ├── parseCsvFile.ts, columnMapping.ts (+.test), buildTransactions.ts
 │   ├── normalizeMerchantName.ts, parseDate.ts, filenameTagParser.ts
 ├── lib/categorization/
 │   ├── categorizationEngine.ts (+.test), clustering.ts (+.test), coverage.ts, seedData.ts
+│   ├── incomeExpense.ts (+.test)    §8 Phase 4: computeIncomeExpenseBreakdown
 ├── lib/db/
 │   ├── schema.ts (idb schema, v2), repository.ts (CRUD)
 ├── lib/export/
@@ -393,7 +447,8 @@ src/
 │   ├── useBudgetStore.ts     central Zustand store, all actions
 │   └── selectors.ts          derived-state hooks, no datasetType param (§8)
 ├── styles/index.css          Tailwind v4 @theme tokens from DESIGN.md
-└── types/models.ts           Transaction, CategoryRule, Category, SourceFile, DatasetType
+└── types/models.ts           Transaction, CategoryRule, Category, SourceFile, DatasetType,
+                               CategoryKind (§8 Phase 4)
                                (DatasetType still exists but is vestigial, see §3/§8)
 
 .github/workflows/deploy.yml  build+test+deploy to GitHub Pages (Actions must be
@@ -404,14 +459,18 @@ testdata/                     gitignored — real personal bank CSVs, local-only
 
 ## 11. Current repo/git state
 
-- Branch: `feat/categorize-tab` (checked out locally, in sync with
-  `origin/feat/categorize-tab` — nothing to commit or push).
-- Both phases are committed and pushed: `51d4231` (Training tab, also the tip of
-  `feat/training-tab`) and `bdf10a3` (Categorize tab, tip of `feat/categorize-tab`).
-- PR open/merge status for either branch is **unconfirmed** — `gh` CLI isn't
-  installed on this machine and the repo returns 404 on unauthenticated
-  `WebFetch` (private repo), so check the GitHub UI directly.
-- `npm run test` (19 tests) and `npm run build` both passing as of last check.
+- Branch: `feat/categorize-tab` (checked out locally). **3 commits ahead of
+  `origin/feat/categorize-tab` — not yet pushed**: `b83d9a8` (pie chart
+  Other-promotion, income vs. expenses, multi-file import review — §8
+  "Post-launch fixes"), `b709ebd` (single-page merge — §8), and whatever
+  follows for the copy/naming pass (§ pending). Push when the user asks.
+- PR open/merge status for `feat/categorize-tab` / `feat/training-tab` is
+  **unconfirmed** — `gh` CLI isn't installed on this machine and the repo
+  returns 404 on unauthenticated `WebFetch` (private repo), so check the
+  GitHub UI directly. Note `feat/training-tab`'s underlying tab UI no longer
+  exists on `feat/categorize-tab` post-merge (§8) — reconcile deliberately if
+  both branches are ever merged to `main`, not by accident.
+- `npm run test` (24 tests) and `npm run build` both passing as of last check.
 - Local dev: `cd /Users/shruthinayak/Documents/offline-budget-tracker && npm run dev`
   → `http://localhost:5173/offline-budget-tracker/` (note the base path). nvm was
   installed this session (`~/.nvm`, appended to `~/.zshrc`) since this machine had
