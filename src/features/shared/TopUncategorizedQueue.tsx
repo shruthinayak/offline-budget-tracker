@@ -1,13 +1,8 @@
 import { useTopUncategorizedClusters } from '../../store/selectors'
 import { ClusterLabelCard } from './ClusterLabelCard'
-import type { DatasetType } from '../../types/models'
 
-interface TopUncategorizedQueueProps {
-  datasetType: DatasetType
-}
-
-export function TopUncategorizedQueue({ datasetType }: TopUncategorizedQueueProps) {
-  const clusters = useTopUncategorizedClusters(datasetType, 10)
+export function TopUncategorizedQueue() {
+  const clusters = useTopUncategorizedClusters(10)
 
   if (clusters.length === 0) return null
 

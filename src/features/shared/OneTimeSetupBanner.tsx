@@ -9,10 +9,11 @@ export function OneTimeSetupBanner() {
     <div className="mb-6 flex items-start gap-3 rounded-xl border border-primary-container/40 bg-surface-container-low px-5 py-4">
       <Info size={20} className="mt-0.5 shrink-0 text-primary" />
       <div className="flex-1 text-body-sm text-on-surface-variant">
-        <p className="text-on-surface font-medium">This is a one-time setup step.</p>
+        <p className="text-on-surface font-medium">Getting started</p>
         <p>
-          Upload your past statement CSVs once to build a training dataset. The categories you teach
-          here are reused automatically the next time you categorize new statements.
+          Upload a statement CSV to see it auto-categorized using common merchants we already know.
+          Correct anything that's wrong or missing — every correction is remembered, so next month's
+          statements come in more accurately categorized automatically.
         </p>
         <p className="mt-1">
           Tip: name files <code className="rounded bg-surface-container-high px-1.5 py-0.5">name_bank_month.csv</code> (e.g.{' '}

@@ -1,10 +1,5 @@
 import { useMemo } from 'react'
-import { useDatasetTransactions } from '../../store/selectors'
-import type { DatasetType } from '../../types/models'
-
-interface IncomeExpenseSummaryProps {
-  datasetType: DatasetType
-}
+import { useBudgetStore } from '../../store/useBudgetStore'
 
 const currencyFormatter = new Intl.NumberFormat(undefined, {
   style: 'currency',
@@ -15,8 +10,8 @@ const currencyFormatter = new Intl.NumberFormat(undefined, {
 // Amount sign convention (see `extractAmount` in columnMapping.ts): positive
 // = credit/income, negative = debit/expense. Independent of categorization —
 // counts every transaction in the batch, not just categorized ones.
-export function IncomeExpenseSummary({ datasetType }: IncomeExpenseSummaryProps) {
-  const transactions = useDatasetTransactions(datasetType)
+export function IncomeExpenseSummary() {
+  const transactions = useBudgetStore((state) => state.transactions)
 
   const { income, expenses } = useMemo(() => {
     let income = 0

@@ -2,21 +2,14 @@ import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { CategoryDropdown } from '../../components/CategoryDropdown'
 import { useBudgetStore } from '../../store/useBudgetStore'
-import { useDatasetTransactions } from '../../store/selectors'
-import type { DatasetType, ReviewTableFilters } from '../../types/models'
+import type { ReviewTableFilters } from '../../types/models'
 
 const PAGE_SIZE = 10
 const currencyFormatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' })
 const EMPTY_FILTERS: ReviewTableFilters = { search: '', category: null, bank: null, person: null }
 
-interface ReviewTableProps {
-  datasetType: DatasetType
-  /** Enables the checkbox column + bulk-apply-category action bar. */
-  selectable?: boolean
-}
-
-export function ReviewTable({ datasetType, selectable = false }: ReviewTableProps) {
-  const transactions = useDatasetTransactions(datasetType)
+export function ReviewTable() {
+  const transactions = useBudgetStore((state) => state.transactions)
   const categories = useBudgetStore((state) => state.categories)
   const editTransactionCategory = useBudgetStore((state) => state.editTransactionCategory)
   const editTransactionCategories = useBudgetStore((state) => state.editTransactionCategories)
@@ -128,7 +121,7 @@ export function ReviewTable({ datasetType, selectable = false }: ReviewTableProp
         </div>
       </div>
 
-      {selectable && selectedIds.size > 0 && (
+      {selectedIds.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 border-b border-outline-variant bg-primary-container/15 px-5 py-3">
           <span className="text-body-sm font-medium text-on-surface">{selectedIds.size} selected</span>
           <span className="text-body-sm text-on-surface-variant">Apply category:</span>
@@ -147,11 +140,9 @@ export function ReviewTable({ datasetType, selectable = false }: ReviewTableProp
         <table className="w-full min-w-[720px] border-collapse text-left">
           <thead>
             <tr className="border-b border-outline-variant bg-surface-container-low/50 text-label-md uppercase tracking-widest text-on-surface-variant">
-              {selectable && (
-                <th className="w-10 px-5 py-3">
-                  <input type="checkbox" checked={allPageSelected} onChange={toggleAllOnPage} aria-label="Select all on page" />
-                </th>
-              )}
+              <th className="w-10 px-5 py-3">
+                <input type="checkbox" checked={allPageSelected} onChange={toggleAllOnPage} aria-label="Select all on page" />
+              </th>
               <th className="px-5 py-3 font-semibold">Date</th>
               <th className="px-5 py-3 font-semibold">Description</th>
               <th className="px-5 py-3 font-semibold">Category</th>
@@ -163,16 +154,14 @@ export function ReviewTable({ datasetType, selectable = false }: ReviewTableProp
           <tbody className="divide-y divide-outline-variant">
             {pageRows.map((t) => (
               <tr key={t.id} className="hover:bg-surface-container-low">
-                {selectable && (
-                  <td className="px-5 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(t.id)}
-                      onChange={() => toggleRow(t.id)}
-                      aria-label={`Select ${t.rawDescription}`}
-                    />
-                  </td>
-                )}
+                <td className="px-5 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(t.id)}
+                    onChange={() => toggleRow(t.id)}
+                    aria-label={`Select ${t.rawDescription}`}
+                  />
+                </td>
                 <td className="px-5 py-3 text-body-sm">{t.date}</td>
                 <td className="px-5 py-3">
                   <p className="text-body-sm font-medium text-on-surface">{t.rawDescription}</p>

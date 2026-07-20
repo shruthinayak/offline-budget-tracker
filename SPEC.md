@@ -11,14 +11,17 @@ root for the original spec). Core promise: **no user financial data ever leaves 
 browser** — no backend, no remote API calls for processing/categorization/chat.
 Ships as a static site on GitHub Pages.
 
-Two-tab header UI:
-- **Create Training Data** — one-time(ish) bulk upload of historical statements to
-  teach the categorizer.
-- **Categorize** — recurring (monthly) flow: upload new statements, get them
-  auto-categorized using what's been taught, correct mistakes, export.
+**Single-page flow (as of Phase 3 — see §8):** upload statement CSVs (historical
+or this month's, no distinction), get them auto-categorized using what's been
+taught so far, correct mistakes inline. Every correction teaches the categorizer
+immediately — there's no separate "training" step. Originally shipped as a
+two-tab header ("Create Training Data" + "Categorize"); merged into one flow
+after the two tabs turned out to be doing the same thing (§8 explains why, and
+notes the resulting **deviation from PRD acceptance criterion #1**, which asked
+for two header tabs).
 
 A third PRD feature (chat popup with an "Audit my expenses" preloaded action) has
-**not been built yet** — out of scope for both phases so far.
+**not been built yet** — out of scope so far.
 
 ## 2. Tech stack
 
@@ -64,13 +67,16 @@ Important nuance: **`datasetType` has no data migration** — it's read with a
 default (`t.datasetType ?? 'training'` in `repository.ts`'s `getAllTransactions`)
 rather than backfilled, since adding an optional field needs no version bump.
 
-`categoryRules` and `categories` are **shared** between both tabs by design — the
-whole point of the Training tab is to seed rules the Categorize tab then uses (and
-vice versa: corrections made in Categorize can feed back into training data).
-`transactions` is a single IndexedDB store holding **both** tabs' rows,
-distinguished by `datasetType`; the two tabs never see each other's rows because
-every selector/component that reads transactions is parameterized by
-`datasetType` (see §4 in the codebase, `src/store/selectors.ts`).
+**Post-merge (§8): `datasetType` is vestigial.** It's still on the `Transaction`
+type and every row written gets the literal `'categorize'`, but nothing reads it
+anymore — no selector or component filters by it. It was kept (rather than
+migrated away) purely to avoid an unnecessary schema change; a browser that still
+has old `'training'`-tagged rows from before the merge just sees them as
+ordinary rows now, same as everything else.
+
+`categoryRules` and `categories` are the durable "learned knowledge" — they
+persist independent of whatever's currently in `transactions`, which is really
+just the current working batch (see §8, `startNewBatch`).
 
 ## 4. Categorization engine (`src/lib/categorization/`)
 
@@ -150,57 +156,45 @@ every selector/component that reads transactions is parameterized by
   produces fresh ids). `mergeIntoLedger(ledger, incoming)` appends only
   genuinely-new rows, returns `{ merged, added, addedCount, skippedCount }`.
 
-Two separate downloadable outputs exist and must not be confused:
-- **`training-data.csv`** — the Training tab's data (`datasetType === 'training'`),
-  re-downloadable any time via "Download Training CSV," and also re-triggered by
-  "Update Training Data" (see §7).
-- **`categorized-transactions.csv`** — one Categorize-tab batch
-  (`datasetType === 'categorize'`), via "Download Categorized CSV."
+Two downloadable outputs exist post-merge (§8) and must not be confused:
+- **`transactions.csv`** — the current working batch (everything in `transactions`
+  right now), via "Download CSV."
 - **`consolidated-transactions.csv`** — the **entire** `masterLedger` (all months
-  ever appended), via "Consolidated Transactions" (see §7).
+  ever appended, deduped), via "Consolidated Transactions."
 
-## 7. Training tab (Phase 1 — complete, verified)
+## 7. Phase 1 + Phase 2 history (superseded by §8 — kept for context)
 
-`src/features/training/TrainingTabPage.tsx` composes:
-`OneTimeSetupBanner` → `CsvUploadPanel` → `ImportReviewCard` → `StatsRow`
-(total/coverage-ring/remaining) → `CoverageGateBanner` (shown at ≥90% coverage)
-→ `TopUncategorizedQueue` (top-10 recurring uncategorized merchants, card grid,
-each a `ClusterLabelCard` with a `CategoryDropdown`) → `ReviewTable` (all rows,
-searchable/filterable) → `DownloadTrainingCsvButton`.
+The app originally shipped as two header tabs, built in two phases. **Both tabs'
+functionality still exists — it was merged into one page in Phase 3 (§8), not
+removed.** This section is kept because it explains the origin of patterns still
+in the code (e.g. why `datasetType` is on the `Transaction` type at all).
 
-Labeling a cluster (`labelCluster` action) writes one `categoryRules` entry and
-bulk-updates every matching uncategorized transaction at once — this is
-**dataset-agnostic on purpose**: a merchant label is true regardless of which tab
-surfaced it, so it can affect rows in either dataset.
+**Training tab (Phase 1)** — `OneTimeSetupBanner` → `CsvUploadPanel` →
+`ImportReviewCard` → `StatsRow` → `CoverageGateBanner` (≥90% coverage) →
+`TopUncategorizedQueue` (top-10 recurring uncategorized merchants, card grid,
+each a `ClusterLabelCard` with a `CategoryDropdown`) → `ReviewTable` →
+`DownloadTrainingCsvButton`. Labeling a cluster (`labelCluster` action) writes one
+`categoryRules` entry and bulk-updates every matching uncategorized transaction
+at once — dataset-agnostic on purpose, and still exactly how cluster labeling
+works today.
 
-## 8. Categorize tab (Phase 2 — complete, verified against real data)
+**Categorize tab (Phase 2)** — the same components reused via a `datasetType:
+'training' | 'categorize'` prop (`StatsRow`, `CoverageRingCard`,
+`CoverageGateBanner`, `TopUncategorizedQueue`, `CsvUploadPanel`,
+`ImportReviewCard`, `ReviewTable`), plus new ones: `CategoryPieChart`,
+multi-select bulk edit on `ReviewTable`, an "Update Training Data" action that
+swept manual corrections into `categoryRules` *and* the training dataset, a
+"Consolidated Transactions" master-ledger action, and a "Start a new month"
+batch-clear action. Rule usage tracking (`timesApplied`/`lastAppliedAt`) was
+added here too.
 
-`src/features/categorize/CategorizeTabPage.tsx` composes (mostly **reused**
-Training-tab components, now parameterized by a `datasetType` prop — see below):
-`CsvUploadPanel(datasetType="categorize")` → `ImportReviewCard` → `StatsRow` →
-`CategoryPieChart` (new) → `CoverageGateBanner` → `TopUncategorizedQueue` →
-`ReviewTable(selectable)` (new: multi-select) → `CategorizeActionsBar` (new).
+**A real bug was caught and fixed during the Phase 2 reuse pass**: `lastImport`
+(the review-card state) was global in the store — without a check, switching
+tabs without dismissing the card would show the *other* tab's review card. Fixed
+by gating on `lastImport.datasetType === datasetType` at the time; superseded by
+the `recentImports` array design in §8's post-launch fixes.
 
-### Reuse strategy (why so few new files)
-Most Training-tab components got a `datasetType: 'training' | 'categorize'` prop
-instead of being duplicated: `StatsRow`, `CoverageRingCard`, `CoverageGateBanner`,
-`TopUncategorizedQueue`, `CsvUploadPanel`, `ImportReviewCard`, `ReviewTable`. Their
-underlying selector hooks (`src/store/selectors.ts`: `useCoverage`,
-`useTopUncategorizedClusters`, `useRemainingUncategorizedCount`,
-`useTotalDatapoints`, `useDatasetTransactions`) all take the same parameter and
-filter `state.transactions` by it.
-
-**A real bug was caught and fixed during this reuse pass**: `lastImport` (the
-review-card state) is global in the store — without a check, switching from
-Training to Categorize (or vice versa) without dismissing the card would show the
-*other* tab's review card. Fixed by gating `ImportReviewCard` on
-`lastImport.datasetType === datasetType`.
-
-**`ReviewTable`** was also changed to own its filter state locally (`useState`)
-instead of a global `reviewTableFilters` store slice — that slice was removed
-entirely, since there's no reason a search box's text should survive a tab switch.
-
-### New in this phase
+### What Phase 1/2 built (still true today, just no longer tab-scoped)
 
 - **`CategoryPieChart.tsx`** — hand-rolled SVG donut (stacked `<circle>` elements
   with `stroke-dasharray`/`stroke-dashoffset`, same technique as
@@ -220,41 +214,35 @@ entirely, since there's no reason a search box's text should survive a tab switc
   checkbox column + a "N selected" action bar with a `CategoryDropdown` that
   applies to every selected row via the new `editTransactionCategories(ids, category)`
   store action (bulk sibling of the existing single-row `editTransactionCategory`).
-- **"Update Training Data"** (`updateTrainingDataFromCategorized` action) —
-  sweeps every Categorize-tab transaction with `categorySource === 'manual'`
-  (covers dropdown edits, bulk edits, *and* cluster-labeling — all three already
-  set that field) and for each: upserts an exact-match `categoryRules` entry
-  (same mechanism `labelCluster` uses) **and** upserts a matching row into the
-  `'training'`-dataset transactions (update-by-`normalizedName` if one exists,
-  else add), then re-downloads `training-data.csv` with the merged set — so the
-  correction is reflected in the rule engine immediately *and* in the portable
-  exported file, not just in-memory state.
-- **"Consolidated Transactions"** (`consolidateAndDownload` action) — the user
-  explicitly chose an **in-app IndexedDB ledger over a real File System Access
-  API file** (works in every browser, not just Chrome/Edge). One click does both
-  append-with-dedup (via `mergeIntoLedger`) and download-the-full-ledger. Verified
-  live: clicking twice on the same batch correctly reports "41 new" then "0 new
-  (41 already there)."
-- **"Start a new month"** (`clearCategorizeBatch` action) — deletes the current
-  batch's `datasetType === 'categorize'` transactions + their `sourceFiles`
-  records (both from IndexedDB and in-memory state) so re-opening the tab starts
-  fresh. Gated behind a `window.confirm()` in the component (not the store
-  action) since it's destructive to unsaved-batch data.
+- **"Update Training Data"** (`updateTrainingDataFromCategorized` action,
+  **removed in Phase 3, §8** — every manual correction now upserts a rule
+  immediately via `upsertUserRule`, so this became redundant) — swept every
+  Categorize-tab transaction with `categorySource === 'manual'` and upserted a
+  `categoryRules` entry + a training-dataset row for each.
+- **"Consolidated Transactions"** (`consolidateAndDownload` action, still exists,
+  now merges *all* current transactions rather than just `datasetType ===
+  'categorize'` ones) — the user explicitly chose an **in-app IndexedDB ledger
+  over a real File System Access API file** (works in every browser, not just
+  Chrome/Edge). One click does both append-with-dedup (via `mergeIntoLedger`)
+  and download-the-full-ledger. Verified live: clicking twice on the same batch
+  correctly reports "41 new" then "0 new (41 already there)."
+- **"Start a new month"** (`clearCategorizeBatch` action, renamed `startNewBatch`
+  in Phase 3, §8 — now clears *all* current transactions, not just
+  `datasetType === 'categorize'` ones) — deletes the current batch's
+  transactions + their `sourceFiles` records so starting fresh next month is a
+  clean slate. Gated behind a `window.confirm()` in the component since it's
+  destructive to unsaved-batch data.
 - **Rule usage tracking** — `timesApplied`/`lastAppliedAt` on `CategoryRule` now
   actually get bumped (`applyRuleUsage()` helper in `useBudgetStore.ts`, fed by
-  the `onRuleApplied` callback threaded through every `categorizeAll()` call in
-  both tabs' import flows and the reseed-recompute path). **The prune UI itself
-  was explicitly deferred** — the user only asked for counting this phase, no
-  "Manage Rules" screen exists yet.
-- **CSV export split** — `exportTrainingCsv()` and `exportCategorizedCsv()` are
-  now separate store actions, each filtering by `datasetType` before calling
-  `downloadTransactionsCsv`. Before this fix, one shared `exportTrainingCsv`
-  action would have leaked Categorize-tab rows into the Training CSV once
-  `datasetType` existed — caught and fixed proactively, then verified live
-  (Training tab's export contained exactly 2 rows — only the ones mirrored in via
-  "Update Training Data" — not all 41 Categorize-tab rows).
+  the `onRuleApplied` callback threaded through every `categorizeAll()` call).
+  **The prune UI itself was explicitly deferred** — still true post-merge, no
+  "Manage Rules" screen exists yet (see §12).
+- **CSV export split** (**collapsed back into one export in Phase 3, §8**, since
+  there's only one dataset now) — `exportTrainingCsv()` and
+  `exportCategorizedCsv()` were briefly separate store actions to avoid leaking
+  Categorize-tab rows into the Training CSV.
 
-### Post-launch fixes (user feedback pass)
+### Post-launch fixes (user feedback pass, pre-merge)
 
 - **Pie chart "Other" promotion** — unchecking a category in the legend now
   recomputes the individual-vs-Other split against the *currently visible*
@@ -264,7 +252,7 @@ entirely, since there's no reason a search box's text should survive a tab switc
   persisted in a `useRef` map across renders — a category keeps its own color
   as long as it stays individually shown, so promoting/demoting others never
   repaints it. This required moving off the previous "color follows
-  full-list rank" scheme (§8 above), which couldn't support promotion without
+  full-list rank" scheme (§7 above), which couldn't support promotion without
   visually reshuffling every other visible slice.
 - **Income vs. expenses** — new `IncomeExpenseSummary.tsx`, sitting next to
   the pie chart. Sums all of the batch's transactions (not just categorized
@@ -279,11 +267,81 @@ entirely, since there's no reason a search box's text should survive a tab switc
   `sourceFileId` (`updateImportMapping`, `updateImportTags`, `dismissImport`)
   so each card acts on its own file.
 
+## 8. Single-page merge (Phase 3 — complete, verified)
+
+**Why**: with §7's "Update Training Data" flow already teaching the categorizer
+automatically from Categorize-tab corrections, and a merchant seed list that
+will cover most common Canadian merchants out of the box (`seedMerchantCategories.json`,
+§4 — a fuller Canadian list is expected to be supplied later), the Training
+tab's one job — bulk-teach before you start categorizing — stopped pulling its
+weight. The two tabs were doing the same thing through two different doors.
+User confirmed via explicit choice: merge into one page rather than keep the
+tabs or reframe Training as optional.
+
+**This is a deliberate deviation from PRD acceptance criterion #1** (two header
+tabs) — flagged to the user before implementing, since it reverses a documented
+requirement rather than just refactoring internals.
+
+### What changed
+
+- **`src/shell/HeaderTabs.tsx` deleted; `AppShell.tsx` renders one page** —
+  `src/features/budget/MainPage.tsx` (renamed from `CategorizeTabPage.tsx`).
+  No more tab state.
+- **Every `datasetType`-parameterized component and selector dropped the
+  parameter** — `StatsRow`, `CoverageRingCard`, `CoverageGateBanner`,
+  `TopUncategorizedQueue`, `CsvUploadPanel`, `ImportReviewCard`, `ReviewTable`,
+  `CategoryPieChart`, `IncomeExpenseSummary`, and every `selectors.ts` hook now
+  just read `state.transactions` directly. `useDatasetTransactions` was deleted
+  (its callers switched to reading `state.transactions` straight from the
+  store).
+- **Folder rename to match**: `features/training/` → `features/shared/` (its
+  components are shared building blocks now, not Training-tab-specific);
+  `features/categorize/` → `features/budget/`, containing `MainPage.tsx`,
+  `CategoryPieChart.tsx`, `IncomeExpenseSummary.tsx`, and `ActionsBar.tsx`
+  (renamed from `CategorizeActionsBar.tsx`). `TrainingTabPage.tsx` and
+  `DownloadTrainingCsvButton.tsx` were deleted outright (no longer needed).
+- **Auto-teach on every manual correction** — the actual functional heart of
+  this phase. `editTransactionCategory` and `editTransactionCategories` (single
+  and bulk row edits in `ReviewTable`) now call a new shared `upsertUserRule()`
+  helper and immediately create/update a `categoryRules` entry, exactly like
+  `labelCluster` already did for cluster labeling. Previously, a plain
+  dropdown edit only updated that one transaction — a correction had **no**
+  effect on future imports until the user separately clicked "Update Training
+  Data." Now every correction — single edit, bulk edit, or cluster label —
+  teaches the categorizer the moment it happens, with no separate step.
+  Verified live: editing one row's category immediately writes a
+  `source: 'user-labeled'` rule to IndexedDB (checked directly against the
+  `categoryRules` object store).
+- **`transactions` is now just "the current working batch"** — `startNewBatch`
+  (renamed from `clearCategorizeBatch`) clears *all* current transactions, not
+  a `datasetType`-filtered subset, since there's no longer a permanent
+  "training" bucket living alongside it. The durable memory is `categoryRules`
+  (grows forever, survives batch-clearing) and `masterLedger` (the
+  append-only historical record via "Consolidated Transactions") — not the
+  `transactions` store itself. **Known side effect**: pre-merge browsers with
+  old `datasetType: 'training'` rows now see those rows folded into the same
+  working view as everything else (and subject to "Start a new month"
+  clearing) — a one-time, harmless consequence of unifying the concept, not a
+  bug.
+- **Exports collapsed to one**: `exportCsv()` (renamed from
+  `exportCategorizedCsv`) downloads `transactions.csv` — everything in the
+  current batch, no dataset filter. `exportTrainingCsv` and
+  `updateTrainingDataFromCategorized` were deleted.
+- **`OneTimeSetupBanner`** — kept, copy rewritten (no longer says "one-time
+  setup step" tied to a separate tab), now shown on `MainPage` only when
+  `totalDatapoints === 0` (first run) instead of unconditionally on a
+  dedicated tab.
+- **`ReviewTable`'s `selectable` prop removed** — multi-select bulk edit is
+  always on now; there was never a second, non-selectable usage site once the
+  tabs merged.
+
 ## 9. Key design decisions & rationale (quick-reference)
 
 | Decision | Why |
 |---|---|
-| Two-tab **header**, not the mockup's sidebar | PRD acceptance criterion #1 explicitly requires header tabs; mockup's visual language (colors/shapes/shadows) was kept, layout wasn't. |
+| **Single-page flow, not the PRD's two header tabs** (§8) | The two tabs converged on doing the same job once corrections auto-taught the categorizer and a merchant seed list existed — kept as two doors into one room only added confusion. User confirmed explicitly; documented here as an intentional PRD deviation, not an oversight. |
+| Header (not the mockup's sidebar), even after the tab merge | Mockup's visual language (colors/shapes/shadows) was kept, layout wasn't — this survived the single-page merge even though there's nothing to switch between anymore. |
+| Every manual correction auto-teaches a rule (§8) | Point of the single-page merge: "taught to the categorizer as part of categorization," not a separate step. Single/bulk edits now go through the same `upsertUserRule` mechanism cluster-labeling always used. |
 | Self-hosted fonts/icons | Mockup used Google Fonts/Material Symbols CDN — conflicts with "offline after first load." |
 | IndexedDB over localStorage | Thousands of rows; localStorage's sync string-only 5MB quota isn't viable. |
 | 7-column export (raw_description added) | Explicit user request, deviates from PRD's stated 6 columns, for cross-checking exported rows against the original statement text. |
@@ -293,7 +351,7 @@ entirely, since there's no reason a search box's text should survive a tab switc
 | `SEED_VERSION` reseed mechanism | Same root cause as above — editing the seed JSON silently did nothing for browsers that already seeded, since seeding only ran once. |
 | Master ledger = IndexedDB, not File System Access API | User's explicit choice — universal browser support over Chrome/Edge-only real file-append. |
 | Pie chart color-by-identity, not sort-rank | dataviz skill non-negotiable: "a filter that changes the series count must not repaint the survivors." |
-| `datasetType` field over separate IndexedDB stores | Keeps `categoryRules`/`categories` trivially shared while still letting every selector cleanly scope `transactions` per tab. |
+| `datasetType` field over separate IndexedDB stores (now vestigial, §3/§8) | Originally kept `categoryRules`/`categories` trivially shared while letting selectors scope `transactions` per tab; kept as a dead field post-merge rather than a schema migration, since nothing reads it anymore. |
 | `testdata/` gitignored, never committed | Contains the user's and their partner's real bank statements (CIBC/TD/Wealthsimple) — committing real financial data to GitHub would contradict the app's entire privacy premise. |
 
 ## 10. File manifest
@@ -302,26 +360,25 @@ entirely, since there's no reason a search box's text should survive a tab switc
 src/
 ├── App.tsx, main.tsx
 ├── shell/
-│   ├── AppShell.tsx          top header, tab state, loadInitialData on mount
-│   └── HeaderTabs.tsx
+│   └── AppShell.tsx          header (no tabs), loadInitialData on mount, renders MainPage
 ├── components/
 │   └── CategoryDropdown.tsx  shared: existing categories + "Other"(free text) + "Misc"
-├── features/training/        (mostly reused by Categorize via datasetType prop)
-│   ├── TrainingTabPage.tsx
-│   ├── OneTimeSetupBanner.tsx        Training-only, not reused
-│   ├── CsvUploadPanel.tsx            datasetType prop
-│   ├── ImportReviewCard.tsx          datasetType prop (gates on lastImport.datasetType)
-│   ├── StatsRow.tsx                  datasetType prop
-│   ├── CoverageRingCard.tsx          datasetType prop
-│   ├── CoverageGateBanner.tsx        datasetType prop, CTA text/action varies
-│   ├── TopUncategorizedQueue.tsx     datasetType prop
-│   ├── ClusterLabelCard.tsx          dataset-agnostic (labelCluster affects both)
-│   ├── ReviewTable.tsx               datasetType + selectable props
-│   └── DownloadTrainingCsvButton.tsx Training-only
-├── features/categorize/
-│   ├── CategorizeTabPage.tsx
-│   ├── CategoryPieChart.tsx
-│   └── CategorizeActionsBar.tsx
+├── features/shared/          building blocks used by MainPage (post-merge, §8 —
+│   │                         formerly features/training/, no longer tab-specific)
+│   ├── OneTimeSetupBanner.tsx      shown on MainPage only when totalDatapoints === 0
+│   ├── CsvUploadPanel.tsx
+│   ├── ImportReviewCard.tsx        renders one card per src/store/useBudgetStore.ts recentImports entry
+│   ├── StatsRow.tsx
+│   ├── CoverageRingCard.tsx
+│   ├── CoverageGateBanner.tsx
+│   ├── TopUncategorizedQueue.tsx
+│   ├── ClusterLabelCard.tsx
+│   └── ReviewTable.tsx             multi-select always on (no more selectable prop)
+├── features/budget/           (formerly features/categorize/)
+│   ├── MainPage.tsx                the whole app's single page (formerly CategorizeTabPage.tsx)
+│   ├── CategoryPieChart.tsx         Other-promotion logic, §8's post-launch fixes
+│   ├── IncomeExpenseSummary.tsx
+│   └── ActionsBar.tsx               formerly CategorizeActionsBar.tsx
 ├── lib/csv/
 │   ├── parseCsvFile.ts, columnMapping.ts (+.test), buildTransactions.ts
 │   ├── normalizeMerchantName.ts, parseDate.ts, filenameTagParser.ts
@@ -334,9 +391,10 @@ src/
 ├── data/seedMerchantCategories.json   user-curated, don't silently edit
 ├── store/
 │   ├── useBudgetStore.ts     central Zustand store, all actions
-│   └── selectors.ts          datasetType-parameterized derived-state hooks
+│   └── selectors.ts          derived-state hooks, no datasetType param (§8)
 ├── styles/index.css          Tailwind v4 @theme tokens from DESIGN.md
-└── types/models.ts           Transaction, CategoryRule, Category, SourceFile, DatasetType, etc.
+└── types/models.ts           Transaction, CategoryRule, Category, SourceFile, DatasetType
+                               (DatasetType still exists but is vestigial, see §3/§8)
 
 .github/workflows/deploy.yml  build+test+deploy to GitHub Pages (Actions must be
                                set as the Pages source in repo Settings — one-time

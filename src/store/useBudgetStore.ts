@@ -26,7 +26,7 @@ import {
   putTransactions,
   setMeta,
 } from '../lib/db/repository'
-import type { Category, CategoryRule, DatasetType, SourceFile, Transaction } from '../types/models'
+import type { Category, CategoryRule, SourceFile, Transaction } from '../types/models'
 
 /** A just-imported (or being-corrected) file, shown as a dismissible,
  *  editable review card — never blocks the import itself. */
@@ -39,12 +39,10 @@ export interface ImportedFileReview {
   mapping: ColumnMapping
   bank: string
   person: string
-  datasetType: DatasetType
 }
 
 interface QueuedFile {
   file: File
-  datasetType: DatasetType
 }
 
 interface BudgetStoreState {
@@ -62,7 +60,7 @@ interface BudgetStoreState {
   actionMessage: string | null
 
   loadInitialData: () => Promise<void>
-  queueFiles: (files: File[], datasetType: DatasetType) => Promise<void>
+  queueFiles: (files: File[]) => Promise<void>
   updateImportMapping: (sourceFileId: string, mapping: ColumnMapping) => Promise<void>
   updateImportTags: (sourceFileId: string, bank: string, person: string) => Promise<void>
   dismissImport: (sourceFileId: string) => void
@@ -70,11 +68,9 @@ interface BudgetStoreState {
   editTransactionCategory: (id: string, category: string) => Promise<void>
   editTransactionCategories: (ids: string[], category: string) => Promise<void>
   addCustomCategory: (name: string) => Promise<void>
-  exportTrainingCsv: () => void
-  exportCategorizedCsv: () => void
-  updateTrainingDataFromCategorized: () => Promise<void>
+  exportCsv: () => void
   consolidateAndDownload: () => Promise<void>
-  clearCategorizeBatch: () => Promise<void>
+  startNewBatch: () => Promise<void>
 }
 
 /** Bumps timesApplied/lastAppliedAt on every rule that was used to
@@ -91,6 +87,41 @@ async function applyRuleUsage(
   await putCategoryRules(bumped)
   const bumpedById = new Map(bumped.map((r) => [r.id, r]))
   return rules.map((r) => bumpedById.get(r.id) ?? r)
+}
+
+/** Creates or refreshes the single user-labeled rule for a merchant — the
+ *  one mechanism every "teach the categorizer" path (cluster labeling, a
+ *  single row edit, a bulk edit) goes through, so a correction anywhere
+ *  immediately improves future auto-categorization. */
+function upsertUserRule(
+  categoryRules: CategoryRule[],
+  pattern: string,
+  category: string,
+  now: number,
+  appliedCount: number,
+): CategoryRule {
+  const existingRule = categoryRules.find(
+    (r) => r.matchType === 'exact' && r.pattern === pattern && r.source === 'user-labeled',
+  )
+  return existingRule
+    ? { ...existingRule, category, lastAppliedAt: now, timesApplied: existingRule.timesApplied + appliedCount }
+    : {
+        id: crypto.randomUUID(),
+        pattern,
+        matchType: 'exact',
+        category,
+        source: 'user-labeled',
+        confidence: 1,
+        createdAt: now,
+        lastAppliedAt: now,
+        timesApplied: appliedCount,
+      }
+}
+
+function mergeRule(categoryRules: CategoryRule[], rule: CategoryRule): CategoryRule[] {
+  return categoryRules.some((r) => r.id === rule.id)
+    ? categoryRules.map((r) => (r.id === rule.id ? rule : r))
+    : [...categoryRules, rule]
 }
 
 /** Builds+categorizes a file's rows and writes them in place under
@@ -112,7 +143,7 @@ async function importParsedFile(
       person: review.person || 'Unknown',
       sourceFileId: review.sourceFileId,
       sourceFileName: review.fileName,
-      datasetType: review.datasetType,
+      datasetType: 'categorize',
     }),
     categoryRules,
     (rule) => ruleUsage.set(rule.id, (ruleUsage.get(rule.id) ?? 0) + 1),
@@ -170,7 +201,6 @@ async function drainUploadQueue(
         mapping,
         bank: filenameTags.bank ?? '',
         person: filenameTags.person ?? '',
-        datasetType: next.datasetType,
       })
     } catch {
       set({ uploadError: `Could not parse "${next.file.name}" as CSV.` })
@@ -239,8 +269,8 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
     })
   },
 
-  async queueFiles(files, datasetType) {
-    const queued = files.map((file) => ({ file, datasetType }))
+  async queueFiles(files) {
+    const queued = files.map((file) => ({ file }))
     set({ uploadQueue: [...get().uploadQueue, ...queued] })
     if (get().isImporting) return
     set({ isImporting: true })
@@ -271,27 +301,7 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
       (t) => t.normalizedName === normalizedName && !t.category,
     )
 
-    const existingRule = categoryRules.find(
-      (r) => r.matchType === 'exact' && r.pattern === normalizedName && r.source === 'user-labeled',
-    )
-    const rule: CategoryRule = existingRule
-      ? {
-          ...existingRule,
-          category,
-          lastAppliedAt: now,
-          timesApplied: existingRule.timesApplied + matchingTransactions.length,
-        }
-      : {
-          id: crypto.randomUUID(),
-          pattern: normalizedName,
-          matchType: 'exact',
-          category,
-          source: 'user-labeled',
-          confidence: 1,
-          createdAt: now,
-          lastAppliedAt: now,
-          timesApplied: matchingTransactions.length,
-        }
+    const rule = upsertUserRule(categoryRules, normalizedName, category, now, matchingTransactions.length)
 
     const updatedTransactions = transactions.map((t) =>
       t.normalizedName === normalizedName && !t.category
@@ -306,32 +316,51 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
 
     set({
       transactions: updatedTransactions,
-      categoryRules: existingRule
-        ? categoryRules.map((r) => (r.id === rule.id ? rule : r))
-        : [...categoryRules, rule],
+      categoryRules: mergeRule(categoryRules, rule),
     })
   },
 
   async editTransactionCategory(id, category) {
-    const { transactions } = get()
+    const { transactions, categoryRules } = get()
+    const target = transactions.find((t) => t.id === id)
+    if (!target) return
+    const now = Date.now()
+
+    // Every correction teaches the categorizer immediately, not just this row.
+    const rule = upsertUserRule(categoryRules, target.normalizedName, category, now, 1)
+
     const updated = transactions.map((t) =>
       t.id === id ? { ...t, category, categorySource: 'manual' as const } : t,
     )
     const changed = updated.find((t) => t.id === id)
-    if (changed) await putTransactions([changed])
-    set({ transactions: updated })
+    await Promise.all([changed ? putTransactions([changed]) : Promise.resolve(), putCategoryRule(rule)])
+    set({ transactions: updated, categoryRules: mergeRule(categoryRules, rule) })
   },
 
   async editTransactionCategories(ids, category) {
     if (ids.length === 0) return
     const idSet = new Set(ids)
-    const { transactions } = get()
+    const { transactions, categoryRules } = get()
+    const now = Date.now()
+    const selected = transactions.filter((t) => idSet.has(t.id))
+
+    const countByPattern = new Map<string, number>()
+    for (const t of selected) countByPattern.set(t.normalizedName, (countByPattern.get(t.normalizedName) ?? 0) + 1)
+
+    let updatedRules = categoryRules
+    const rulesToPersist: CategoryRule[] = []
+    for (const [pattern, count] of countByPattern) {
+      const rule = upsertUserRule(updatedRules, pattern, category, now, count)
+      updatedRules = mergeRule(updatedRules, rule)
+      rulesToPersist.push(rule)
+    }
+
     const updated = transactions.map((t) =>
       idSet.has(t.id) ? { ...t, category, categorySource: 'manual' as const } : t,
     )
     const changed = updated.filter((t) => idSet.has(t.id))
-    await putTransactions(changed)
-    set({ transactions: updated })
+    await Promise.all([putTransactions(changed), putCategoryRules(rulesToPersist)])
+    set({ transactions: updated, categoryRules: updatedRules })
   },
 
   async addCustomCategory(name) {
@@ -345,99 +374,13 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
     set({ categories: [...categories, category] })
   },
 
-  exportTrainingCsv() {
-    const rows = get().transactions.filter((t) => t.datasetType === 'training')
-    downloadTransactionsCsv(rows, 'training-data.csv')
-  },
-
-  exportCategorizedCsv() {
-    const rows = get().transactions.filter((t) => t.datasetType === 'categorize')
-    downloadTransactionsCsv(rows, 'categorized-transactions.csv')
-  },
-
-  async updateTrainingDataFromCategorized() {
-    const { transactions, categoryRules } = get()
-    const amended = transactions.filter(
-      (t) => t.datasetType === 'categorize' && t.categorySource === 'manual' && t.category,
-    )
-    if (amended.length === 0) {
-      set({ actionMessage: 'No manually-corrected rows to teach yet — edit a category first.' })
-      return
-    }
-    const now = Date.now()
-
-    // Upsert categoryRules keyed by merchant name — same mechanism labelCluster uses.
-    const ruleByPattern = new Map(
-      categoryRules
-        .filter((r) => r.matchType === 'exact' && r.source === 'user-labeled')
-        .map((r) => [r.pattern, r]),
-    )
-    const rulesToPersist: CategoryRule[] = []
-    for (const t of amended) {
-      const category = t.category as string
-      const existingRule = ruleByPattern.get(t.normalizedName)
-      const rule: CategoryRule = existingRule
-        ? { ...existingRule, category, lastAppliedAt: now }
-        : {
-            id: crypto.randomUUID(),
-            pattern: t.normalizedName,
-            matchType: 'exact',
-            category,
-            source: 'user-labeled',
-            confidence: 1,
-            createdAt: now,
-            lastAppliedAt: now,
-            timesApplied: 0,
-          }
-      ruleByPattern.set(t.normalizedName, rule)
-      rulesToPersist.push(rule)
-    }
-    await putCategoryRules(rulesToPersist)
-    const ruleById = new Map(rulesToPersist.map((r) => [r.id, r]))
-    const finalCategoryRules = [...categoryRules.filter((r) => !ruleById.has(r.id)), ...rulesToPersist]
-
-    // Mirror into the training dataset — update the existing training example
-    // for that merchant if one exists, else add a new one.
-    const trainingByName = new Map(
-      transactions.filter((t) => t.datasetType === 'training').map((t) => [t.normalizedName, t]),
-    )
-    const trainingUpserts: Transaction[] = []
-    for (const t of amended) {
-      const category = t.category as string
-      const existing = trainingByName.get(t.normalizedName)
-      const row: Transaction = existing
-        ? { ...existing, category, categorySource: 'manual' }
-        : {
-            ...t,
-            id: crypto.randomUUID(),
-            datasetType: 'training',
-            sourceFileId: 'amended-from-categorize',
-            sourceFileName: 'Amended via Categorize tab',
-            createdAt: now,
-          }
-      trainingByName.set(t.normalizedName, row)
-      trainingUpserts.push(row)
-    }
-    await putTransactions(trainingUpserts)
-    const trainingById = new Map(trainingUpserts.map((t) => [t.id, t]))
-    const finalTransactions = [...transactions.filter((t) => !trainingById.has(t.id)), ...trainingUpserts]
-
-    set({
-      transactions: finalTransactions,
-      categoryRules: finalCategoryRules,
-      actionMessage: `Taught ${amended.length} correction${amended.length === 1 ? '' : 's'} to the categorizer and updated training-data.csv.`,
-    })
-
-    downloadTransactionsCsv(
-      finalTransactions.filter((t) => t.datasetType === 'training'),
-      'training-data.csv',
-    )
+  exportCsv() {
+    downloadTransactionsCsv(get().transactions, 'transactions.csv')
   },
 
   async consolidateAndDownload() {
     const { transactions, masterLedger } = get()
-    const categorizeRows = transactions.filter((t) => t.datasetType === 'categorize')
-    const { merged, added, addedCount, skippedCount } = mergeIntoLedger(masterLedger, categorizeRows)
+    const { merged, added, addedCount, skippedCount } = mergeIntoLedger(masterLedger, transactions)
 
     if (addedCount > 0) await putMasterLedgerEntries(added)
 
@@ -451,23 +394,18 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
     downloadTransactionsCsv(merged, 'consolidated-transactions.csv')
   },
 
-  async clearCategorizeBatch() {
+  async startNewBatch() {
     const { transactions, sourceFiles } = get()
-    const categorizeIds = transactions.filter((t) => t.datasetType === 'categorize').map((t) => t.id)
-    const categorizeSourceFileIds = new Set(
-      transactions.filter((t) => t.datasetType === 'categorize').map((t) => t.sourceFileId),
-    )
-    const sourceFileIdsToRemove = sourceFiles
-      .filter((f) => categorizeSourceFileIds.has(f.id))
-      .map((f) => f.id)
+    const ids = transactions.map((t) => t.id)
+    const sourceFileIds = sourceFiles.map((f) => f.id)
 
-    await Promise.all([deleteTransactions(categorizeIds), deleteSourceFiles(sourceFileIdsToRemove)])
+    await Promise.all([deleteTransactions(ids), deleteSourceFiles(sourceFileIds)])
 
     set({
-      transactions: transactions.filter((t) => t.datasetType !== 'categorize'),
-      sourceFiles: sourceFiles.filter((f) => !sourceFileIdsToRemove.includes(f.id)),
+      transactions: [],
+      sourceFiles: [],
       actionMessage: null,
-      recentImports: get().recentImports.filter((r) => r.datasetType !== 'categorize'),
+      recentImports: [],
     })
   },
 }))
