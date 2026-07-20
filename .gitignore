@@ -2,3 +2,12 @@
 node_modules/
 *.log
 .claude/
+dist/
+dist-ssr/
+*.local
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# Real personal bank/statement exports used for local testing — never commit.
+testdata/
