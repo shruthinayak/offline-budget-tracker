@@ -1,9 +1,10 @@
 import { Download } from 'lucide-react'
 import { useBudgetStore } from '../../store/useBudgetStore'
+import { useTotalDatapoints } from '../../store/selectors'
 
 export function DownloadTrainingCsvButton() {
   const exportTrainingCsv = useBudgetStore((state) => state.exportTrainingCsv)
-  const totalDatapoints = useBudgetStore((state) => state.transactions.length)
+  const totalDatapoints = useTotalDatapoints('training')
 
   return (
     <button

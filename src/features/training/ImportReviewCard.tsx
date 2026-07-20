@@ -1,6 +1,7 @@
 import { CheckCircle2, X } from 'lucide-react'
 import { useBudgetStore } from '../../store/useBudgetStore'
 import type { CanonicalColumn } from '../../lib/csv/columnMapping'
+import type { DatasetType } from '../../types/models'
 
 const FIELD_LABELS: { field: CanonicalColumn; label: string }[] = [
   { field: 'date', label: 'Date' },
@@ -12,17 +13,25 @@ const FIELD_LABELS: { field: CanonicalColumn; label: string }[] = [
 
 const NONE = ''
 
+interface ImportReviewCardProps {
+  datasetType: DatasetType
+}
+
 /** Non-blocking: the file is already imported using auto-guessed columns by
  *  the time this renders. Every edit here immediately re-applies against
- *  the same source file rather than gating the import on confirmation. */
-export function ImportReviewCard() {
+ *  the same source file rather than gating the import on confirmation.
+ *  `lastImport` is global (whichever file was most recently dropped in
+ *  either tab), so this only renders when it belongs to the current tab —
+ *  otherwise switching tabs without dismissing would leak the other tab's
+ *  review card. */
+export function ImportReviewCard({ datasetType }: ImportReviewCardProps) {
   const lastImport = useBudgetStore((state) => state.lastImport)
   const uploadQueueLength = useBudgetStore((state) => state.uploadQueue.length)
   const updateLastImportMapping = useBudgetStore((state) => state.updateLastImportMapping)
   const updateLastImportTags = useBudgetStore((state) => state.updateLastImportTags)
   const dismissLastImport = useBudgetStore((state) => state.dismissLastImport)
 
-  if (!lastImport) return null
+  if (!lastImport || lastImport.datasetType !== datasetType) return null
 
   return (
     <div className="mb-6 rounded-xl border border-secondary/30 bg-surface-container-lowest p-5 custom-shadow">

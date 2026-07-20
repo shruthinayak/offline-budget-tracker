@@ -1,13 +1,18 @@
 import { useCoverage } from '../../store/selectors'
 import { COVERAGE_GOAL } from '../../lib/categorization/coverage'
+import type { DatasetType } from '../../types/models'
 
 const SIZE = 72
 const STROKE = 8
 const RADIUS = (SIZE - STROKE) / 2
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
-export function CoverageRingCard() {
-  const coverage = useCoverage()
+interface CoverageRingCardProps {
+  datasetType: DatasetType
+}
+
+export function CoverageRingCard({ datasetType }: CoverageRingCardProps) {
+  const coverage = useCoverage(datasetType)
   const pct = Math.round(coverage * 100)
   const offset = CIRCUMFERENCE * (1 - coverage)
   const ringColor = coverage >= COVERAGE_GOAL ? 'var(--color-secondary)' : 'var(--color-primary)'

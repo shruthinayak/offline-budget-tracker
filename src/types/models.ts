@@ -1,6 +1,7 @@
 export type MatchType = 'exact' | 'contains' | 'startsWith'
 export type CategorySource = 'rule' | 'heuristic' | 'manual' | null
 export type RuleSource = 'user-labeled' | 'seed-heuristic'
+export type DatasetType = 'training' | 'categorize'
 
 export interface Transaction {
   id: string
@@ -15,6 +16,9 @@ export interface Transaction {
   sourceFileId: string
   sourceFileName: string
   createdAt: number
+  /** Which tab this row belongs to. Rows persisted before this field existed
+   *  are treated as 'training' at read time (see repository.ts). */
+  datasetType: DatasetType
 }
 
 export interface SourceFile {

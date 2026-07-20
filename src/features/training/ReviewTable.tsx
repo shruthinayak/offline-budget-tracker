@@ -2,17 +2,28 @@ import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { CategoryDropdown } from '../../components/CategoryDropdown'
 import { useBudgetStore } from '../../store/useBudgetStore'
+import { useDatasetTransactions } from '../../store/selectors'
+import type { DatasetType, ReviewTableFilters } from '../../types/models'
 
 const PAGE_SIZE = 10
 const currencyFormatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' })
+const EMPTY_FILTERS: ReviewTableFilters = { search: '', category: null, bank: null, person: null }
 
-export function ReviewTable() {
-  const transactions = useBudgetStore((state) => state.transactions)
+interface ReviewTableProps {
+  datasetType: DatasetType
+  /** Enables the checkbox column + bulk-apply-category action bar. */
+  selectable?: boolean
+}
+
+export function ReviewTable({ datasetType, selectable = false }: ReviewTableProps) {
+  const transactions = useDatasetTransactions(datasetType)
   const categories = useBudgetStore((state) => state.categories)
-  const filters = useBudgetStore((state) => state.reviewTableFilters)
-  const setReviewTableFilters = useBudgetStore((state) => state.setReviewTableFilters)
   const editTransactionCategory = useBudgetStore((state) => state.editTransactionCategory)
+  const editTransactionCategories = useBudgetStore((state) => state.editTransactionCategories)
+
   const [page, setPage] = useState(0)
+  const [filters, setFilters] = useState<ReviewTableFilters>(EMPTY_FILTERS)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const banks = useMemo(() => Array.from(new Set(transactions.map((t) => t.bank))).sort(), [transactions])
   const persons = useMemo(() => Array.from(new Set(transactions.map((t) => t.person))).sort(), [transactions])
@@ -30,6 +41,36 @@ export function ReviewTable() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const clampedPage = Math.min(page, pageCount - 1)
   const pageRows = filtered.slice(clampedPage * PAGE_SIZE, clampedPage * PAGE_SIZE + PAGE_SIZE)
+  const pageRowIds = useMemo(() => pageRows.map((t) => t.id), [pageRows])
+  const allPageSelected = pageRowIds.length > 0 && pageRowIds.every((id) => selectedIds.has(id))
+
+  function updateFilters(patch: Partial<ReviewTableFilters>) {
+    setFilters((prev) => ({ ...prev, ...patch }))
+    setPage(0)
+  }
+
+  function toggleRow(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAllOnPage() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allPageSelected) pageRowIds.forEach((id) => next.delete(id))
+      else pageRowIds.forEach((id) => next.add(id))
+      return next
+    })
+  }
+
+  async function applyBulkCategory(category: string) {
+    await editTransactionCategories(Array.from(selectedIds), category)
+    setSelectedIds(new Set())
+  }
 
   if (transactions.length === 0) return null
 
@@ -44,19 +85,13 @@ export function ReviewTable() {
               type="text"
               placeholder="Search description…"
               value={filters.search}
-              onChange={(event) => {
-                setReviewTableFilters({ search: event.target.value })
-                setPage(0)
-              }}
+              onChange={(event) => updateFilters({ search: event.target.value })}
               className="w-40 bg-transparent text-body-sm focus:outline-none"
             />
           </div>
           <select
             value={filters.category ?? ''}
-            onChange={(event) => {
-              setReviewTableFilters({ category: event.target.value || null })
-              setPage(0)
-            }}
+            onChange={(event) => updateFilters({ category: event.target.value || null })}
             className="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-1.5 text-body-sm focus:outline-none"
           >
             <option value="">All categories</option>
@@ -68,10 +103,7 @@ export function ReviewTable() {
           </select>
           <select
             value={filters.bank ?? ''}
-            onChange={(event) => {
-              setReviewTableFilters({ bank: event.target.value || null })
-              setPage(0)
-            }}
+            onChange={(event) => updateFilters({ bank: event.target.value || null })}
             className="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-1.5 text-body-sm focus:outline-none"
           >
             <option value="">All banks</option>
@@ -83,10 +115,7 @@ export function ReviewTable() {
           </select>
           <select
             value={filters.person ?? ''}
-            onChange={(event) => {
-              setReviewTableFilters({ person: event.target.value || null })
-              setPage(0)
-            }}
+            onChange={(event) => updateFilters({ person: event.target.value || null })}
             className="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-1.5 text-body-sm focus:outline-none"
           >
             <option value="">All people</option>
@@ -99,10 +128,30 @@ export function ReviewTable() {
         </div>
       </div>
 
+      {selectable && selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-outline-variant bg-primary-container/15 px-5 py-3">
+          <span className="text-body-sm font-medium text-on-surface">{selectedIds.size} selected</span>
+          <span className="text-body-sm text-on-surface-variant">Apply category:</span>
+          <CategoryDropdown value={null} categories={categories} onChange={(c) => void applyBulkCategory(c)} />
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-body-sm text-on-surface-variant hover:underline"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse text-left">
           <thead>
             <tr className="border-b border-outline-variant bg-surface-container-low/50 text-label-md uppercase tracking-widest text-on-surface-variant">
+              {selectable && (
+                <th className="w-10 px-5 py-3">
+                  <input type="checkbox" checked={allPageSelected} onChange={toggleAllOnPage} aria-label="Select all on page" />
+                </th>
+              )}
               <th className="px-5 py-3 font-semibold">Date</th>
               <th className="px-5 py-3 font-semibold">Description</th>
               <th className="px-5 py-3 font-semibold">Category</th>
@@ -114,6 +163,16 @@ export function ReviewTable() {
           <tbody className="divide-y divide-outline-variant">
             {pageRows.map((t) => (
               <tr key={t.id} className="hover:bg-surface-container-low">
+                {selectable && (
+                  <td className="px-5 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(t.id)}
+                      onChange={() => toggleRow(t.id)}
+                      aria-label={`Select ${t.rawDescription}`}
+                    />
+                  </td>
+                )}
                 <td className="px-5 py-3 text-body-sm">{t.date}</td>
                 <td className="px-5 py-3">
                   <p className="text-body-sm font-medium text-on-surface">{t.rawDescription}</p>

@@ -2,7 +2,9 @@ import { getDb } from './schema'
 import type { Transaction, SourceFile, CategoryRule, Category } from '../../types/models'
 
 export async function getAllTransactions(): Promise<Transaction[]> {
-  return (await getDb()).getAll('transactions')
+  const rows = await (await getDb()).getAll('transactions')
+  // Rows persisted before `datasetType` existed default to 'training'.
+  return rows.map((t) => ({ ...t, datasetType: t.datasetType ?? 'training' }))
 }
 
 export async function putTransactions(transactions: Transaction[]): Promise<void> {
@@ -27,6 +29,14 @@ export async function getAllSourceFiles(): Promise<SourceFile[]> {
 
 export async function putSourceFile(file: SourceFile): Promise<void> {
   await (await getDb()).put('sourceFiles', file)
+}
+
+export async function deleteSourceFiles(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  const db = await getDb()
+  const tx = db.transaction('sourceFiles', 'readwrite')
+  await Promise.all(ids.map((id) => tx.store.delete(id)))
+  await tx.done
 }
 
 export async function getAllCategoryRules(): Promise<CategoryRule[]> {
@@ -59,6 +69,18 @@ export async function getAllCategories(): Promise<Category[]> {
 
 export async function putCategory(category: Category): Promise<void> {
   await (await getDb()).put('categories', category)
+}
+
+export async function getAllMasterLedgerEntries(): Promise<Transaction[]> {
+  return (await getDb()).getAll('masterLedger')
+}
+
+export async function putMasterLedgerEntries(entries: Transaction[]): Promise<void> {
+  if (entries.length === 0) return
+  const db = await getDb()
+  const tx = db.transaction('masterLedger', 'readwrite')
+  await Promise.all(entries.map((e) => tx.store.put(e)))
+  await tx.done
 }
 
 export async function getMeta<T = unknown>(key: string): Promise<T | undefined> {

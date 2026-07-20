@@ -16,6 +16,7 @@ function makeTransaction(overrides: Partial<Transaction>): Transaction {
     sourceFileId: 'file-1',
     sourceFileName: 'test.csv',
     createdAt: 0,
+    datasetType: 'training',
     ...overrides,
   }
 }

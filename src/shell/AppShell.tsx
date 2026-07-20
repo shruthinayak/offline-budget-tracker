@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Wallet, ShieldCheck } from 'lucide-react'
 import { useBudgetStore } from '../store/useBudgetStore'
 import { TrainingTabPage } from '../features/training/TrainingTabPage'
+import { CategorizeTabPage } from '../features/categorize/CategorizeTabPage'
 import { HeaderTabs, type AppTab } from './HeaderTabs'
 
 export function AppShell() {
@@ -40,10 +41,7 @@ export function AppShell() {
         ) : activeTab === 'training' ? (
           <TrainingTabPage />
         ) : (
-          <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-outline-variant text-on-surface-variant">
-            <p className="text-headline-sm text-on-surface">Categorize — coming in the next loop</p>
-            <p className="text-body-sm">This tab is built in a follow-up iteration once Training is verified.</p>
-          </div>
+          <CategorizeTabPage />
         )}
       </main>
     </div>
