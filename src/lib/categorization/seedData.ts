@@ -5,7 +5,7 @@ import type { Category, CategoryKind, CategoryRule, MatchType } from '../../type
  *  structurally — this triggers a one-time reseed in browsers that already
  *  seeded an older version, so edits to the shipped data actually take
  *  effect instead of being silently masked by whatever was cached on first run. */
-export const SEED_VERSION = 2
+export const SEED_VERSION = 3
 
 /** Derived from the seed data itself (plus a guaranteed catch-all) rather
  *  than hand-maintained, so editing seedMerchantCategories.json can't drift

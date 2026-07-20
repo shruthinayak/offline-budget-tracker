@@ -5,7 +5,7 @@ export interface FilenameTags {
 
 /**
  * Best-effort parse of the recommended `name_bank_month.csv` convention
- * (e.g. "shruthi_chase_may.csv"). Never required — a non-matching filename
+ * (e.g. "mira_chase_may.csv"). Never required — a non-matching filename
  * just leaves the tags blank for the user to fill in manually.
  */
 export function parseFilenameTags(fileName: string): FilenameTags {

@@ -13,7 +13,7 @@ function makeTransaction(overrides: Partial<Transaction>): Transaction {
     category: null,
     categorySource: null,
     bank: 'Chase',
-    person: 'Shruthi',
+    person: 'Mira',
     sourceFileId: 'file-1',
     sourceFileName: 'test.csv',
     createdAt: 0,

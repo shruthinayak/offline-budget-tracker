@@ -17,7 +17,7 @@ export function OneTimeSetupBanner() {
         </p>
         <p className="mt-1">
           Tip: name files <code className="rounded bg-surface-container-high px-1.5 py-0.5">name_bank_month.csv</code> (e.g.{' '}
-          <code className="rounded bg-surface-container-high px-1.5 py-0.5">shruthi_chase_may.csv</code>) and we&apos;ll
+          <code className="rounded bg-surface-container-high px-1.5 py-0.5">mira_chase_may.csv</code>) and we&apos;ll
           auto-fill the person/bank tags for you — it&apos;s just a convenience, any filename works.
         </p>
       </div>

@@ -12,7 +12,7 @@ function makeTransaction(overrides: Partial<Transaction>): Transaction {
     category: 'Entertainment',
     categorySource: 'heuristic',
     bank: 'Chase',
-    person: 'Shruthi',
+    person: 'Mira',
     sourceFileId: 'file-1',
     sourceFileName: 'test.csv',
     createdAt: 0,
