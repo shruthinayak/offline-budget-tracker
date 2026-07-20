@@ -57,15 +57,15 @@ interface BudgetStoreState {
 
   uploadQueue: QueuedFile[]
   isImporting: boolean
-  lastImport: ImportedFileReview | null
+  recentImports: ImportedFileReview[]
   uploadError: string | null
   actionMessage: string | null
 
   loadInitialData: () => Promise<void>
   queueFiles: (files: File[], datasetType: DatasetType) => Promise<void>
-  updateLastImportMapping: (mapping: ColumnMapping) => Promise<void>
-  updateLastImportTags: (bank: string, person: string) => Promise<void>
-  dismissLastImport: () => void
+  updateImportMapping: (sourceFileId: string, mapping: ColumnMapping) => Promise<void>
+  updateImportTags: (sourceFileId: string, bank: string, person: string) => Promise<void>
+  dismissImport: (sourceFileId: string) => void
   labelCluster: (normalizedName: string, category: string) => Promise<void>
   editTransactionCategory: (id: string, category: string) => Promise<void>
   editTransactionCategories: (ids: string[], category: string) => Promise<void>
@@ -136,11 +136,13 @@ async function importParsedFile(
   const otherTransactions = transactions.filter((t) => t.sourceFileId !== review.sourceFileId)
   const otherSourceFiles = sourceFiles.filter((f) => f.id !== review.sourceFileId)
 
+  const otherRecentImports = get().recentImports.filter((r) => r.sourceFileId !== review.sourceFileId)
+
   set({
     transactions: [...otherTransactions, ...newTransactions],
     sourceFiles: [...otherSourceFiles, sourceFile],
     categoryRules: updatedCategoryRules,
-    lastImport: review,
+    recentImports: [...otherRecentImports, review],
     uploadError: null,
   })
 }
@@ -186,7 +188,7 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
 
   uploadQueue: [],
   isImporting: false,
-  lastImport: null,
+  recentImports: [],
   uploadError: null,
   actionMessage: null,
 
@@ -246,20 +248,20 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
     set({ isImporting: false })
   },
 
-  async updateLastImportMapping(mapping) {
-    const { lastImport } = get()
-    if (!lastImport) return
-    await importParsedFile(get, set, { ...lastImport, mapping })
+  async updateImportMapping(sourceFileId, mapping) {
+    const review = get().recentImports.find((r) => r.sourceFileId === sourceFileId)
+    if (!review) return
+    await importParsedFile(get, set, { ...review, mapping })
   },
 
-  async updateLastImportTags(bank, person) {
-    const { lastImport } = get()
-    if (!lastImport) return
-    await importParsedFile(get, set, { ...lastImport, bank, person })
+  async updateImportTags(sourceFileId, bank, person) {
+    const review = get().recentImports.find((r) => r.sourceFileId === sourceFileId)
+    if (!review) return
+    await importParsedFile(get, set, { ...review, bank, person })
   },
 
-  dismissLastImport() {
-    set({ lastImport: null })
+  dismissImport(sourceFileId) {
+    set({ recentImports: get().recentImports.filter((r) => r.sourceFileId !== sourceFileId) })
   },
 
   async labelCluster(normalizedName, category) {
@@ -465,7 +467,7 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
       transactions: transactions.filter((t) => t.datasetType !== 'categorize'),
       sourceFiles: sourceFiles.filter((f) => !sourceFileIdsToRemove.includes(f.id)),
       actionMessage: null,
-      lastImport: null,
+      recentImports: get().recentImports.filter((r) => r.datasetType !== 'categorize'),
     })
   },
 }))

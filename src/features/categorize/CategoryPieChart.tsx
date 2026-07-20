@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useDatasetTransactions } from '../../store/selectors'
 import type { DatasetType } from '../../types/models'
 
@@ -7,9 +7,10 @@ interface CategoryPieChartProps {
 }
 
 // Validated categorical palette (dataviz skill reference set) — fixed hue
-// order is the CVD-safety mechanism, never reassigned by sort rank at render
-// time. Slot 7 (last) doubles as the "Other" bucket color for categories
-// beyond the chart's 8-slot budget, per "a 9th series folds into Other."
+// order is the CVD-safety mechanism. The last slot doubles as the shared
+// "Other" bucket color for categories beyond the chart's individual-slice
+// budget; it's only handed out to an individual category when no Other
+// bucket is needed at all (see `palette` below).
 const CATEGORICAL_COLORS = [
   '#2a78d6', // blue
   '#1baf7a', // aqua
@@ -21,6 +22,7 @@ const CATEGORICAL_COLORS = [
   '#eb6834', // orange / Other
 ]
 const MAX_SLOTS = CATEGORICAL_COLORS.length
+const OTHER_COLOR = CATEGORICAL_COLORS[MAX_SLOTS - 1]
 
 const currencyFormatter = new Intl.NumberFormat(undefined, {
   style: 'currency',
@@ -44,34 +46,77 @@ const GAP_DEGREES = 2.5
 export function CategoryPieChart({ datasetType }: CategoryPieChartProps) {
   const transactions = useDatasetTransactions(datasetType)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  // Persists color assignments per category identity across renders so that
+  // promoting a category out of "Other" (or demoting one back in) never
+  // repaints a category that's already individually shown — colors are only
+  // reused/reassigned for categories that just entered or left the
+  // individually-shown set.
+  const colorMapRef = useRef<Map<string, string>>(new Map())
 
-  // Color/rank assignment is computed from the FULL (unfiltered) set so that
-  // toggling a category on/off never repaints the survivors with a
-  // different hue — color follows the entity, not its current rank.
-  const slices = useMemo<CategorySlice[]>(() => {
+  const allCategoryTotals = useMemo(() => {
     const totals = new Map<string, number>()
     for (const t of transactions) {
       if (!t.category) continue
       totals.set(t.category, (totals.get(t.category) ?? 0) + Math.abs(t.amount))
     }
-    const sorted = Array.from(totals.entries()).sort((a, b) => b[1] - a[1])
-    const needsOtherGroup = sorted.length > MAX_SLOTS
-
-    return sorted.map(([category, total], index) => {
-      const isOtherGroup = needsOtherGroup && index >= MAX_SLOTS - 1
-      const color = isOtherGroup ? CATEGORICAL_COLORS[MAX_SLOTS - 1] : CATEGORICAL_COLORS[index]
-      return { category, total, color, isOtherGroup }
-    })
+    return Array.from(totals.entries()).sort((a, b) => b[1] - a[1])
   }, [transactions])
 
-  const visible = slices.filter((s) => !excluded.has(s.category))
-  const visibleIndividual = visible.filter((s) => !s.isOtherGroup)
-  const otherTotal = visible.filter((s) => s.isOtherGroup).reduce((sum, s) => sum + s.total, 0)
+  const { slices, segments } = useMemo(() => {
+    const visible = allCategoryTotals.filter(([category]) => !excluded.has(category))
+    // If everything visible fits in the chart's slot budget, no Other bucket
+    // is needed at all and every visible category gets its own slice —
+    // otherwise the top (MAX_SLOTS - 1) visible categories go individual and
+    // the rest are merged into a single "Other" arc.
+    const individualCount = visible.length <= MAX_SLOTS ? visible.length : MAX_SLOTS - 1
+    const individualVisible = visible.slice(0, individualCount)
+    const otherVisible = visible.slice(individualCount)
+    const individualVisibleSet = new Set(individualVisible.map(([category]) => category))
+    const needsOtherBucket = otherVisible.length > 0
+    const palette = needsOtherBucket ? CATEGORICAL_COLORS.slice(0, MAX_SLOTS - 1) : CATEGORICAL_COLORS
 
-  const segments = [
-    ...visibleIndividual.map((s) => ({ label: s.category, total: s.total, color: s.color })),
-    ...(otherTotal > 0 ? [{ label: 'Other', total: otherTotal, color: CATEGORICAL_COLORS[MAX_SLOTS - 1] }] : []),
-  ]
+    // Reconcile color assignments: keep every still-individual category's
+    // existing color first, then hand out free colors (in rank order) to
+    // categories newly promoted into the individual set.
+    const prevMap = colorMapRef.current
+    const nextMap = new Map<string, string>()
+    const usedColors = new Set<string>()
+    for (const [category] of individualVisible) {
+      const prevColor = prevMap.get(category)
+      if (prevColor && palette.includes(prevColor) && !usedColors.has(prevColor)) {
+        nextMap.set(category, prevColor)
+        usedColors.add(prevColor)
+      }
+    }
+    for (const [category] of individualVisible) {
+      if (nextMap.has(category)) continue
+      const color = palette.find((c) => !usedColors.has(c))
+      if (!color) continue
+      nextMap.set(category, color)
+      usedColors.add(color)
+    }
+    colorMapRef.current = nextMap
+
+    const slices: CategorySlice[] = allCategoryTotals.map(([category, total]) => {
+      const isIndividual = individualVisibleSet.has(category)
+      const isVisible = !excluded.has(category)
+      return {
+        category,
+        total,
+        color: isIndividual ? (nextMap.get(category) ?? OTHER_COLOR) : OTHER_COLOR,
+        isOtherGroup: isVisible && !isIndividual,
+      }
+    })
+
+    const otherTotal = otherVisible.reduce((sum, [, total]) => sum + total, 0)
+    const segments = [
+      ...individualVisible.map(([category, total]) => ({ label: category, total, color: nextMap.get(category)! })),
+      ...(otherTotal > 0 ? [{ label: 'Other', total: otherTotal, color: OTHER_COLOR }] : []),
+    ]
+
+    return { slices, segments }
+  }, [allCategoryTotals, excluded])
+
   const grandTotal = segments.reduce((sum, s) => sum + s.total, 0)
 
   function toggle(category: string) {

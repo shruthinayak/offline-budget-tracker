@@ -254,6 +254,31 @@ entirely, since there's no reason a search box's text should survive a tab switc
   (Training tab's export contained exactly 2 rows — only the ones mirrored in via
   "Update Training Data" — not all 41 Categorize-tab rows).
 
+### Post-launch fixes (user feedback pass)
+
+- **Pie chart "Other" promotion** — unchecking a category in the legend now
+  recomputes the individual-vs-Other split against the *currently visible*
+  categories, so the highest-ranked category still in "Other" gets promoted
+  to its own slice once a slot frees up (and demoted back if the excluded
+  category is re-checked). Colors are assigned per category identity and
+  persisted in a `useRef` map across renders — a category keeps its own color
+  as long as it stays individually shown, so promoting/demoting others never
+  repaints it. This required moving off the previous "color follows
+  full-list rank" scheme (§8 above), which couldn't support promotion without
+  visually reshuffling every other visible slice.
+- **Income vs. expenses** — new `IncomeExpenseSummary.tsx`, sitting next to
+  the pie chart. Sums all of the batch's transactions (not just categorized
+  ones) by amount sign — positive/credit = income, negative/debit = expense
+  (see `extractAmount` in `columnMapping.ts`) — shown as two bars plus a net
+  surplus/deficit line.
+- **Multi-file import review** — `lastImport` (single object) became
+  `recentImports: ImportedFileReview[]` in the store, so uploading a batch of
+  files shows one editable review card per file instead of only the most
+  recently processed one clobbering the rest. `updateLastImportMapping` /
+  `updateLastImportTags` / `dismissLastImport` were renamed to take a
+  `sourceFileId` (`updateImportMapping`, `updateImportTags`, `dismissImport`)
+  so each card acts on its own file.
+
 ## 9. Key design decisions & rationale (quick-reference)
 
 | Decision | Why |
@@ -321,12 +346,13 @@ testdata/                     gitignored — real personal bank CSVs, local-only
 
 ## 11. Current repo/git state
 
-- Branch: `feat/training-tab` (also currently checked out locally).
-- [PR #1](https://github.com/shruthinayak/offline-budget-tracker/pull/1) — Training
-  tab work, pushed, **open/merge status unconfirmed** — check before assuming.
-- **The entire Categorize tab (Phase 2, §8 above) is uncommitted** as of this
-  writing. Nothing has been pushed for it. User was last asked whether to branch
-  off `feat/training-tab` as `feat/categorize-tab` — no answer given yet.
+- Branch: `feat/categorize-tab` (checked out locally, in sync with
+  `origin/feat/categorize-tab` — nothing to commit or push).
+- Both phases are committed and pushed: `51d4231` (Training tab, also the tip of
+  `feat/training-tab`) and `bdf10a3` (Categorize tab, tip of `feat/categorize-tab`).
+- PR open/merge status for either branch is **unconfirmed** — `gh` CLI isn't
+  installed on this machine and the repo returns 404 on unauthenticated
+  `WebFetch` (private repo), so check the GitHub UI directly.
 - `npm run test` (19 tests) and `npm run build` both passing as of last check.
 - Local dev: `cd /Users/shruthinayak/Documents/offline-budget-tracker && npm run dev`
   → `http://localhost:5173/offline-budget-tracker/` (note the base path). nvm was
@@ -360,9 +386,8 @@ testdata/                     gitignored — real personal bank CSVs, local-only
    from this doc) is at `/Users/shruthinayak/.claude/plans/stateful-plotting-flute.md`
    if deeper phase-by-phase planning rationale is needed — this SPEC.md is the
    more complete, durable reference going forward, though.
-4. If continuing the Categorize tab, the next actual step is almost certainly:
-   decide on the branch/PR strategy (§11) and commit — the code itself is done
-   and verified.
+4. Branch/PR strategy is resolved (§11) — `feat/categorize-tab` is committed and
+   pushed. Check GitHub directly for PR/merge status, since local tools can't see it.
 5. If starting something new, update §12 and add a new phase section above it
    following the existing format, then update §11's git-state section once
    committed/pushed.

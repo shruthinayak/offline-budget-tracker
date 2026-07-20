@@ -1,5 +1,6 @@
 import { CheckCircle2, X } from 'lucide-react'
 import { useBudgetStore } from '../../store/useBudgetStore'
+import type { ImportedFileReview } from '../../store/useBudgetStore'
 import type { CanonicalColumn } from '../../lib/csv/columnMapping'
 import type { DatasetType } from '../../types/models'
 
@@ -17,41 +18,54 @@ interface ImportReviewCardProps {
   datasetType: DatasetType
 }
 
-/** Non-blocking: the file is already imported using auto-guessed columns by
- *  the time this renders. Every edit here immediately re-applies against
- *  the same source file rather than gating the import on confirmation.
- *  `lastImport` is global (whichever file was most recently dropped in
- *  either tab), so this only renders when it belongs to the current tab —
- *  otherwise switching tabs without dismissing would leak the other tab's
- *  review card. */
+/** Non-blocking: every queued file is already imported using auto-guessed
+ *  columns by the time its card renders. Every edit here immediately
+ *  re-applies against that same source file rather than gating the import
+ *  on confirmation. `recentImports` holds one entry per file, so uploading
+ *  a batch shows one editable card per file — not just the last one. */
 export function ImportReviewCard({ datasetType }: ImportReviewCardProps) {
-  const lastImport = useBudgetStore((state) => state.lastImport)
+  const recentImports = useBudgetStore((state) => state.recentImports)
   const uploadQueueLength = useBudgetStore((state) => state.uploadQueue.length)
-  const updateLastImportMapping = useBudgetStore((state) => state.updateLastImportMapping)
-  const updateLastImportTags = useBudgetStore((state) => state.updateLastImportTags)
-  const dismissLastImport = useBudgetStore((state) => state.dismissLastImport)
 
-  if (!lastImport || lastImport.datasetType !== datasetType) return null
+  const reviews = recentImports.filter((r) => r.datasetType === datasetType)
+  if (reviews.length === 0) return null
 
   return (
-    <div className="mb-6 rounded-xl border border-secondary/30 bg-surface-container-lowest p-5 custom-shadow">
+    <div className="mb-6 flex flex-col gap-3">
+      {reviews.map((review) => (
+        <SingleImportReviewCard key={review.sourceFileId} review={review} />
+      ))}
+      {uploadQueueLength > 0 && (
+        <p className="text-body-sm text-on-surface-variant">
+          {uploadQueueLength} more file{uploadQueueLength === 1 ? '' : 's'} importing…
+        </p>
+      )}
+    </div>
+  )
+}
+
+function SingleImportReviewCard({ review }: { review: ImportedFileReview }) {
+  const updateImportMapping = useBudgetStore((state) => state.updateImportMapping)
+  const updateImportTags = useBudgetStore((state) => state.updateImportTags)
+  const dismissImport = useBudgetStore((state) => state.dismissImport)
+
+  return (
+    <div className="rounded-xl border border-secondary/30 bg-surface-container-lowest p-5 custom-shadow">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-secondary" />
           <div>
             <p className="text-body-md font-medium text-on-surface">
-              Imported {lastImport.rows.length} rows from {lastImport.fileName}
+              Imported {review.rows.length} rows from {review.fileName}
             </p>
             <p className="text-body-sm text-on-surface-variant">
               Columns were auto-detected — check below and adjust if anything looks off.
-              {uploadQueueLength > 0 &&
-                ` (${uploadQueueLength} more file${uploadQueueLength === 1 ? '' : 's'} importing…)`}
             </p>
           </div>
         </div>
         <button
           type="button"
-          onClick={dismissLastImport}
+          onClick={() => dismissImport(review.sourceFileId)}
           className="shrink-0 rounded-full p-1 text-on-surface-variant hover:bg-surface-container-high"
           aria-label="Dismiss"
         >
@@ -64,19 +78,19 @@ export function ImportReviewCard({ datasetType }: ImportReviewCardProps) {
           <label key={field} className="block">
             <span className="text-label-md text-on-surface-variant">{label}</span>
             <select
-              value={lastImport.mapping[field] ?? NONE}
+              value={review.mapping[field] ?? NONE}
               onChange={(event) =>
-                void updateLastImportMapping({
-                  ...lastImport.mapping,
+                void updateImportMapping(review.sourceFileId, {
+                  ...review.mapping,
                   [field]: event.target.value || undefined,
                 })
               }
               className="mt-1 w-full rounded-lg border border-outline-variant bg-surface-container-low px-2 py-1.5 text-body-sm focus:border-primary focus:outline-none"
             >
               <option value={NONE}>— none —</option>
-              {lastImport.headers.map((header, i) => (
+              {review.headers.map((header, i) => (
                 <option key={header} value={header}>
-                  {lastImport.headerLabels[i] ?? header}
+                  {review.headerLabels[i] ?? header}
                 </option>
               ))}
             </select>
@@ -87,8 +101,8 @@ export function ImportReviewCard({ datasetType }: ImportReviewCardProps) {
           <span className="text-label-md text-on-surface-variant">Bank</span>
           <input
             type="text"
-            value={lastImport.bank}
-            onChange={(event) => void updateLastImportTags(event.target.value, lastImport.person)}
+            value={review.bank}
+            onChange={(event) => void updateImportTags(review.sourceFileId, event.target.value, review.person)}
             className="mt-1 w-full rounded-lg border border-outline-variant bg-surface-container-low px-2 py-1.5 text-body-sm focus:border-primary focus:outline-none"
           />
         </label>
@@ -96,8 +110,8 @@ export function ImportReviewCard({ datasetType }: ImportReviewCardProps) {
           <span className="text-label-md text-on-surface-variant">Person</span>
           <input
             type="text"
-            value={lastImport.person}
-            onChange={(event) => void updateLastImportTags(lastImport.bank, event.target.value)}
+            value={review.person}
+            onChange={(event) => void updateImportTags(review.sourceFileId, review.bank, event.target.value)}
             className="mt-1 w-full rounded-lg border border-outline-variant bg-surface-container-low px-2 py-1.5 text-body-sm focus:border-primary focus:outline-none"
           />
         </label>
