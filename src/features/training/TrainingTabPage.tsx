@@ -21,12 +21,12 @@ export function TrainingTabPage() {
       </div>
 
       <OneTimeSetupBanner />
-      <CsvUploadPanel />
-      <ImportReviewCard />
-      <StatsRow />
-      <CoverageGateBanner />
-      <TopUncategorizedQueue />
-      <ReviewTable />
+      <CsvUploadPanel datasetType="training" />
+      <ImportReviewCard datasetType="training" />
+      <StatsRow datasetType="training" />
+      <CoverageGateBanner datasetType="training" />
+      <TopUncategorizedQueue datasetType="training" />
+      <ReviewTable datasetType="training" />
     </div>
   )
 }

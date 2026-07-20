@@ -31,7 +31,7 @@ function csvEscape(value: string): string {
   return value
 }
 
-export function downloadTrainingCsv(transactions: Transaction[], filename = 'training-data.csv'): void {
+export function downloadTransactionsCsv(transactions: Transaction[], filename: string): void {
   const csv = transactionsToCsv(transactions)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)

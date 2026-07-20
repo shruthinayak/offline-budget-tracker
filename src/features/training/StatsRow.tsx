@@ -1,10 +1,15 @@
 import { Database, AlertTriangle } from 'lucide-react'
 import { useRemainingUncategorizedCount, useTotalDatapoints } from '../../store/selectors'
 import { CoverageRingCard } from './CoverageRingCard'
+import type { DatasetType } from '../../types/models'
 
-export function StatsRow() {
-  const total = useTotalDatapoints()
-  const remaining = useRemainingUncategorizedCount()
+interface StatsRowProps {
+  datasetType: DatasetType
+}
+
+export function StatsRow({ datasetType }: StatsRowProps) {
+  const total = useTotalDatapoints(datasetType)
+  const remaining = useRemainingUncategorizedCount(datasetType)
 
   return (
     <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -16,7 +21,7 @@ export function StatsRow() {
         <h3 className="text-headline-lg">{total.toLocaleString()}</h3>
       </div>
 
-      <CoverageRingCard />
+      <CoverageRingCard datasetType={datasetType} />
 
       <div className="relative flex flex-col overflow-hidden rounded-xl bg-surface-container-lowest p-6 custom-shadow">
         <AlertTriangle size={64} className="absolute -bottom-3 -right-3 text-tertiary/10" />

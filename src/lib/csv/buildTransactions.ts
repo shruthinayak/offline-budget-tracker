@@ -1,4 +1,4 @@
-import type { Transaction } from '../../types/models'
+import type { DatasetType, Transaction } from '../../types/models'
 import type { ColumnMapping } from './columnMapping'
 import { extractAmount } from './columnMapping'
 import { normalizeMerchantName } from './normalizeMerchantName'
@@ -11,12 +11,13 @@ export interface BuildTransactionsInput {
   person: string
   sourceFileId: string
   sourceFileName: string
+  datasetType: DatasetType
 }
 
 /** Converts raw parsed CSV rows into normalized, uncategorized Transaction
  *  records ready to be run through the categorization engine. */
 export function buildTransactions(input: BuildTransactionsInput): Transaction[] {
-  const { rows, mapping, bank, person, sourceFileId, sourceFileName } = input
+  const { rows, mapping, bank, person, sourceFileId, sourceFileName, datasetType } = input
   const now = Date.now()
 
   return rows
@@ -38,6 +39,7 @@ export function buildTransactions(input: BuildTransactionsInput): Transaction[] 
         sourceFileId,
         sourceFileName,
         createdAt: now,
+        datasetType,
       }
     })
     .filter((t): t is Transaction => t !== null)
