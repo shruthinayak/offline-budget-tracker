@@ -48,13 +48,26 @@ export function CategoryPieChart() {
   // individually-shown set.
   const colorMapRef = useRef<Map<string, string>>(new Map())
 
-  const allCategoryTotals = useMemo(() => {
+  // Net (signed) per category, not sum-of-abs — a refund nets against its
+  // category's purchases rather than inflating the total as separate spend.
+  const { allCategoryTotals, reviewOnlyTotals } = useMemo(() => {
     const totals = new Map<string, number>()
     for (const t of transactions) {
       if (!t.category) continue
-      totals.set(t.category, (totals.get(t.category) ?? 0) + Math.abs(t.amount))
+      totals.set(t.category, (totals.get(t.category) ?? 0) + t.amount)
     }
-    return Array.from(totals.entries()).sort((a, b) => b[1] - a[1])
+    const allCategoryTotals: [string, number][] = []
+    const reviewOnlyTotals: [string, number][] = []
+    for (const [category, net] of totals) {
+      // net < 0 means real spend (debits outweigh credits) — eligible for the
+      // pie. net >= 0 (refunds/credits outweigh or equal spend) isn't spending,
+      // so it's surfaced for review only, never charted.
+      if (net < 0) allCategoryTotals.push([category, -net])
+      else reviewOnlyTotals.push([category, net])
+    }
+    allCategoryTotals.sort((a, b) => b[1] - a[1])
+    reviewOnlyTotals.sort((a, b) => b[1] - a[1])
+    return { allCategoryTotals, reviewOnlyTotals }
   }, [transactions])
 
   const { slices, segments } = useMemo(() => {
@@ -123,7 +136,7 @@ export function CategoryPieChart() {
     })
   }
 
-  if (slices.length === 0) return null
+  if (slices.length === 0 && reviewOnlyTotals.length === 0) return null
 
   let cumulative = 0
 
@@ -190,6 +203,18 @@ export function CategoryPieChart() {
                   {currencyFormatter.format(s.total / 100)}
                 </span>
               </label>
+            </li>
+          ))}
+          {reviewOnlyTotals.map(([category, net]) => (
+            <li key={category} className="flex items-center gap-2">
+              <span className="h-4 w-4 shrink-0" />
+              <span className="flex-1 truncate text-body-sm text-on-surface">
+                {category}
+                <span className="text-on-surface-variant"> · not counted in chart</span>
+              </span>
+              <span className="shrink-0 text-body-sm font-medium text-on-surface-variant">
+                {net > 0 ? `+${currencyFormatter.format(net / 100)}` : currencyFormatter.format(net / 100)}
+              </span>
             </li>
           ))}
         </ul>
