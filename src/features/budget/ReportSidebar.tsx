@@ -1,6 +1,7 @@
 import { CategoryPieChart } from './CategoryPieChart'
 import { IncomeExpenseSummary } from './IncomeExpenseSummary'
 import { RulesBackupCard } from './RulesBackupCard'
+import { WorkflowChecklist } from './WorkflowChecklist'
 
 /** The "report" side of the page — category breakdown, income vs.
  *  expenses, and rules backup/restore. Pulled out of the main column into a
@@ -9,6 +10,7 @@ import { RulesBackupCard } from './RulesBackupCard'
 export function ReportSidebar() {
   return (
     <aside className="flex flex-col gap-6 lg:w-[360px] lg:shrink-0">
+      <WorkflowChecklist />
       <CategoryPieChart />
       <IncomeExpenseSummary />
       <RulesBackupCard />
