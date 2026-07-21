@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useBudgetStore } from '../../store/useBudgetStore'
 
 // Validated categorical palette (dataviz skill reference set) — fixed hue
@@ -40,7 +40,9 @@ const GAP_DEGREES = 2.5
 
 export function CategoryPieChart() {
   const transactions = useBudgetStore((state) => state.transactions)
+  const markPieChartViewed = useBudgetStore((state) => state.markPieChartViewed)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  const sectionRef = useRef<HTMLElement>(null)
   // Persists color assignments per category identity across renders so that
   // promoting a category out of "Other" (or demoting one back in) never
   // repaints a category that's already individually shown — colors are only
@@ -127,6 +129,19 @@ export function CategoryPieChart() {
 
   const grandTotal = segments.reduce((sum, s) => sum + s.total, 0)
 
+  useEffect(() => {
+    const el = sectionRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) markPieChartViewed()
+      },
+      { threshold: 0.5 },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [markPieChartViewed])
+
   function toggle(category: string) {
     setExcluded((prev) => {
       const next = new Set(prev)
@@ -141,7 +156,7 @@ export function CategoryPieChart() {
   let cumulative = 0
 
   return (
-    <section className="rounded-xl bg-surface-container-lowest p-6 custom-shadow">
+    <section ref={sectionRef} className="rounded-xl bg-surface-container-lowest p-6 custom-shadow">
       <h2 className="mb-4 text-headline-sm text-on-surface">Spending by category</h2>
       <div className="flex flex-col items-center gap-6">
         <div className="relative shrink-0">

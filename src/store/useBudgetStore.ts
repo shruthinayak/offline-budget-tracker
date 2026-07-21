@@ -61,6 +61,12 @@ interface BudgetStoreState {
   uploadError: string | null
   actionMessage: string | null
 
+  checklistDismissed: boolean
+  checklistViewedPieChart: boolean
+  checklistDownloadedRules: boolean
+  checklistDownloadedTransactions: boolean
+  checklistSavedToHistory: boolean
+
   loadInitialData: () => Promise<void>
   queueFiles: (files: File[]) => Promise<void>
   updateImportMapping: (sourceFileId: string, mapping: ColumnMapping) => Promise<void>
@@ -76,6 +82,8 @@ interface BudgetStoreState {
   exportCsv: () => void
   consolidateAndDownload: () => Promise<void>
   startNewBatch: () => Promise<void>
+  dismissChecklist: () => void
+  markPieChartViewed: () => void
 }
 
 /** Bumps timesApplied/lastAppliedAt on every rule that was used to
@@ -227,8 +235,18 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
   uploadError: null,
   actionMessage: null,
 
+  checklistDismissed: false,
+  checklistViewedPieChart: false,
+  checklistDownloadedRules: false,
+  checklistDownloadedTransactions: false,
+  checklistSavedToHistory: false,
+
   async loadInitialData() {
-    const [existingRules, seededVersion] = await Promise.all([getAllCategoryRules(), getMeta<number>('seedVersion')])
+    const [existingRules, seededVersion, checklistDismissed] = await Promise.all([
+      getAllCategoryRules(),
+      getMeta<number>('seedVersion'),
+      getMeta<boolean>('checklistDismissed'),
+    ])
 
     const needsReseed = seededVersion !== SEED_VERSION
     if (needsReseed) {
@@ -271,6 +289,7 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
       categories,
       masterLedger,
       isLoading: false,
+      checklistDismissed: checklistDismissed ?? false,
     })
   },
 
@@ -391,6 +410,7 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
   exportRules() {
     const entries = exportPersonalizedRules(get().categoryRules)
     downloadJson(entries, 'personalized-merchant-categories.json')
+    set({ checklistDownloadedRules: true })
   },
 
   async importRules(file) {
@@ -444,6 +464,7 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
 
   exportCsv() {
     downloadTransactionsCsv(get().transactions, 'transactions.csv')
+    set({ checklistDownloadedTransactions: true })
   },
 
   async consolidateAndDownload() {
@@ -457,6 +478,7 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
       actionMessage:
         `Added ${addedCount} new transaction${addedCount === 1 ? '' : 's'} to your consolidated file` +
         (skippedCount > 0 ? ` (${skippedCount} already there).` : '.'),
+      checklistSavedToHistory: true,
     })
 
     downloadTransactionsCsv(merged, 'consolidated-transactions.csv')
@@ -475,5 +497,14 @@ export const useBudgetStore = create<BudgetStoreState>((set, get) => ({
       actionMessage: null,
       recentImports: [],
     })
+  },
+
+  dismissChecklist() {
+    set({ checklistDismissed: true })
+    void setMeta('checklistDismissed', true)
+  },
+
+  markPieChartViewed() {
+    if (!get().checklistViewedPieChart) set({ checklistViewedPieChart: true })
   },
 }))
